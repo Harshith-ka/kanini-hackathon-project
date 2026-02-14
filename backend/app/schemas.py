@@ -39,6 +39,8 @@ SYMPTOM_OPTIONS = [
 
 
 class PatientCreate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
     age: int = Field(..., ge=0, le=150)
     gender: Gender
     symptoms: list[str] = Field(..., min_length=1)
@@ -136,6 +138,7 @@ class PatientResponse(BaseModel):
 class PatientRegister(BaseModel):
     full_name: str
     email: str
+    username: Optional[str] = None
     age: int
     gender: Gender
     phone: Optional[str] = None

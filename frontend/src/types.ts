@@ -24,6 +24,7 @@ export interface Explainability {
   top_contributing_features: { name: string; value: number; impact: string }[]
   abnormal_vitals: { name: string; value: number | string; normal_range: string }[]
   department_reasoning: string
+  wait_time_estimate?: string
   shap_contributions?: ShapContribution[] | null
   feature_importance?: FeatureImportance[] | null
 }

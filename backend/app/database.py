@@ -18,8 +18,8 @@ class User(Base):
     
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     username: Mapped[str] = mapped_column(unique=True, index=True) # This will be the email for patients
-    full_name: Mapped[str] = mapped_column(default="")
-    email: Mapped[str] = mapped_column(unique=True, index=True)
+    full_name: Mapped[Optional[str]] = mapped_column(default="")
+    email: Mapped[Optional[str]] = mapped_column(unique=True, index=True)
     phone: Mapped[Optional[str]] = mapped_column()
     hashed_password: Mapped[str] = mapped_column()
     role: Mapped[str] = mapped_column(default="patient") # "admin" or "patient"

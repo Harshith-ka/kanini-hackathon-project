@@ -1,0 +1,5 @@
+Found 4 users:
+ID: 1 | Username: 'admin' | Email: 'admin@vitalcore.ai' | Role: admin
+ID: 2 | Username: 'john' | Email: 'john@example.com' | Role: patient
+ID: 3 | Username: 'mahi' | Email: 'mahi123@example.com' | Role: patient
+ID: 4 | Username: 'mahi@example.com' | Email: 'mahi@example.com' | Role: patient

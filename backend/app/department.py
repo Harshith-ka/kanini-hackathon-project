@@ -32,12 +32,27 @@ def recommend_department(risk_level: str, symptoms: list[str]) -> tuple[str, str
     Returns (recommended_department, reasoning_summary).
     """
     symptoms_set = set(symptoms)
-    for keywords, dept in SYMPTOM_TO_DEPT:
-        if any(s in symptoms_set for s in keywords):
-            reason = f"Risk: {risk_level}. Symptoms match {dept} (e.g. {', '.join(keywords)})."
-            return dept, reason
     dept = RISK_TO_DEFAULT_DEPT.get(risk_level, "General Medicine")
-    reason = f"Risk: {risk_level}. No specialty match; routed to {dept}."
+    
+    # Enhanced Reasoning Logic
+    matched_symptoms = [s for s in symptoms if s in symptoms_set]
+    clinical_findings = f"Patient presents with {', '.join(matched_symptoms)}." if matched_symptoms else "Non-specific presentation."
+    
+    for keywords, target_dept in SYMPTOM_TO_DEPT:
+        if any(s in symptoms_set for s in keywords):
+            hits = [s for s in keywords if s in symptoms_set]
+            reason = (
+                f"Risk assessment indicates {risk_level.upper()} severity. "
+                f"Clinical markers ({', '.join(hits)}) align with {target_dept} protocols. "
+                f"Recommended for immediate {target_dept} evaluation."
+            )
+            return target_dept, reason
+
+    reason = (
+        f"Risk assessment indicates {risk_level.upper()} severity based on vitals analysis. "
+        f"{clinical_findings} "
+        f"No specific specialty criteria met; routing to {dept} for comprehensive workup."
+    )
     return dept, reason
 
 

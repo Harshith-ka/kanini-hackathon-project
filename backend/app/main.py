@@ -3,6 +3,7 @@
 import csv
 import io
 from datetime import datetime
+import os
 from uuid import uuid4
 
 from typing import Optional, List, Any
@@ -62,17 +63,22 @@ app.add_middleware(
 # Auth Endpoints
 class UserCreate(BaseModel):
     username: str
+    email: str
     password: str
+    full_name: str
     role: str = "patient"
 
 @app.post("/api/auth/register")
 async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).filter(User.username == data.username))
+    # Check if username or email already exists
+    result = await db.execute(select(User).filter((User.username == data.username) | (User.email == data.email)))
     if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=400, detail="Username or Email already registered")
     
     new_user = User(
         username=data.username,
+        email=data.email,
+        full_name=data.full_name,
         hashed_password=get_password_hash(data.password),
         role=data.role
     )
@@ -82,9 +88,18 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @app.post("/api/auth/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).filter(User.username == form_data.username))
+    print(f"Login attempt for: {form_data.username}")
+    result = await db.execute(select(User).filter((User.username == form_data.username) | (User.email == form_data.username)))
     user = result.scalars().first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        print(f"User not found: {form_data.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(form_data.password, user.hashed_password):
+        print(f"Password mismatch for user: {user.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -194,6 +209,32 @@ async def add_patient(
     
     patient_id = _generate_patient_id()
     
+    # Determine user ownership
+    target_user_id = None
+    
+    if data.email:
+        # Check if user exists
+        existing_user = (await db.execute(select(User).filter(User.email == data.email))).scalars().first()
+        if existing_user:
+            target_user_id = existing_user.id
+        else:
+            # Create new user for patient
+            new_user = User(
+                username=data.email, # Use email as username
+                email=data.email,
+                full_name=data.full_name,
+                hashed_password=get_password_hash("VitalPass123!"), # Temporary default password
+                role="patient"
+            )
+            db.add(new_user)
+            await db.flush() # Get ID without committing transaction yet
+            target_user_id = new_user.id
+    elif current_user:
+        # If no email provided, link to current user ONLY if they are a patient
+        if current_user.role == 'patient':
+            target_user_id = current_user.id
+        # If admin, we leave it unlinked (None) unless email was provided above
+
     new_record = PatientRecord(
         patient_id=patient_id,
         age=data.age,
@@ -210,7 +251,7 @@ async def add_patient(
         risk_level=risk_level,
         priority_score=priority,
         recommended_department=dept,
-        user_id=current_user.id if current_user else None
+        user_id=target_user_id
     )
     db.add(new_record)
     await db.commit()
@@ -320,14 +361,17 @@ async def register_patient(
     admin: User = Depends(get_current_admin)
 ):
     """Admin registers a new patient, creating a user account and record stub."""
+    # Determine username (explicit > email)
+    final_username = data.username if data.username and data.username.strip() else data.email
+    
     # Check if user already exists
-    result = await db.execute(select(User).filter(User.username == data.email))
+    result = await db.execute(select(User).filter(User.username == final_username))
     if result.scalars().first():
-        raise HTTPException(status_code=400, detail="User with this email already exists")
+        raise HTTPException(status_code=400, detail=f"User with username '{final_username}' already exists")
     
     temp_password = generate_temp_password()
     new_user = User(
-        username=data.email,
+        username=final_username,
         email=data.email,
         full_name=data.full_name,
         phone=data.phone,
@@ -342,7 +386,7 @@ async def register_patient(
     # (Actual clinical data will be added later in add_patient step)
     
     return RegistrationResponse(
-        username=data.email,
+        username=final_username,
         temporary_password=temp_password,
         patient_id=patient_id
     )
@@ -385,9 +429,45 @@ async def get_patient_dashboard(
             
     wait_time = max(15, queue_pos * 10) if queue_pos > 0 else 0
     
+    # Reconstruct explainability object
+    # In a real app, this would be stored in a JSON column or re-calculated
+    if os.getenv("OPENAI_API_KEY"):
+        # Use OpenAI for dynamic explanation
+        context = {
+            "risk_level": record.risk_level,
+            "heart_rate": record.heart_rate,
+            "blood_pressure_systolic": record.blood_pressure_systolic,
+            "blood_pressure_diastolic": record.blood_pressure_diastolic,
+            "spo2": record.spo2,
+            "symptoms": [], # Add symptoms if you can fetch them
+            "recommended_department": record.recommended_department
+        }
+        # In a real scenario, you'd fetch symptoms from a related table or JSON column
+        from app.llm import explain_risk_assessment
+        explainability = await explain_risk_assessment(context)
+    else:
+        # Fallback static explanation
+        explainability = {
+            "top_contributing_features": [{"name": "Reported Symptoms", "value": 1.0, "impact": "High"}],
+            "abnormal_vitals": [],
+            "department_reasoning": "Based on reported symptoms.",
+            "contributing_risk_factors": [],
+            "disease_insights": []
+        }
+
+    # Helper to convert record to dict and add explainability
+    record_dict = record.__dict__.copy()
+    if "_sa_instance_state" in record_dict:
+        del record_dict["_sa_instance_state"]
+    
+    record_dict["explainability"] = explainability
+    record_dict["symptoms"] = [] # Symptoms might not be in DB model yet if not added
+    record_dict["pre_existing_conditions"] = []
+    record_dict["abnormality_alerts"] = []
+    
     return {
         "has_record": True,
-        "record": record,
+        "record": record_dict,
         "queue_position": queue_pos,
         "estimated_wait_minutes": wait_time,
         "user_profile": {
@@ -460,7 +540,7 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
         last_patient_obj = result.scalars().first()
         if last_patient_obj:
             last_patient = last_patient_obj.__dict__
-    reply, state = chat_turn(req.message, req.chat_state, last_patient)
+    reply, state = await chat_turn(req.message, req.chat_state, last_patient)
     return ChatResponse(
         reply=reply,
         chat_state=state,
@@ -644,6 +724,19 @@ def admin_model_retrain(
         return {"ok": True, "summary": summary}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/patients/{patient_id}/discharge")
+async def discharge_patient(patient_id: str, db: AsyncSession = Depends(get_db)):
+    """Discharge a patient (remove from active queue)."""
+    result = await db.execute(select(PatientRecord).filter(PatientRecord.patient_id == patient_id))
+    patient = result.scalars().first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    await db.delete(patient)
+    await db.commit()
+    return {"message": "Patient discharged successfully"}
 
 
 @app.get("/health")

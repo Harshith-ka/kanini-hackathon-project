@@ -6,14 +6,14 @@ const storageKey = 'triage_lang'
 
 const LangContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
   lang: defaultLang,
-  setLang: () => {},
+  setLang: () => { },
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     try {
       const s = localStorage.getItem(storageKey) as Lang | null
-      return s === 'hi' || s === 'en' ? s : defaultLang
+      return s === 'hi' || s === 'en' || s === 'te' || s === 'ta' ? s : defaultLang
     } catch {
       return defaultLang
     }
@@ -22,7 +22,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     setLangState(l)
     try {
       localStorage.setItem(storageKey, l)
-    } catch {}
+    } catch { }
   }, [])
   return (
     <LangContext.Provider value={{ lang, setLang }}>

@@ -1,0 +1,4 @@
+src/AddPatient.tsx(65,9): error TS6133: 'navigate' is declared but its value is never read.
+src/AddPatient.tsx(423,103): error TS2339: Property 'wait_time_estimate' does not exist on type 'Explainability'.
+src/App.tsx(32,9): error TS6133: 'username' is declared but its value is never read.
+src/PatientDashboard.tsx(41,11): error TS6133: 'riskBg' is declared but its value is never read.

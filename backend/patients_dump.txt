@@ -1,0 +1,3 @@
+Found 2 patients:
+ID: 1 | PatientID: PT-20260214-046A1A | UserID: None
+ID: 2 | PatientID: PT-20260214-7B25F1 | UserID: None

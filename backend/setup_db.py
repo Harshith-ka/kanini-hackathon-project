@@ -10,6 +10,8 @@ async def setup():
         if not result.scalars().first():
             admin = User(
                 username="admin",
+                email="admin@vitalcore.ai",
+                full_name="Hospital Administrator",
                 hashed_password=get_password_hash("admin123"),
                 role="admin"
             )

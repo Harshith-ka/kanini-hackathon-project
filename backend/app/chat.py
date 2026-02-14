@@ -142,7 +142,7 @@ def get_medical_term_reply(user_message: str) -> str | None:
     return None
 
 
-def chat_turn(
+async def chat_turn(
     user_message: str,
     chat_state: dict[str, Any],
     last_patient: dict | None,
@@ -156,17 +156,56 @@ def chat_turn(
     # Explicit Mode Triggers
     if any(k in msg for k in ["why", "explain", "risk", "reason", "increased"]):
         if last_patient:
+            # Use LLM for risk explanation if available
+            from app.llm import explain_risk_assessment
+            import os
+            if os.getenv("OPENAI_API_KEY"):
+                 # Prepare context
+                 context = {
+                    "risk_level": last_patient.get("risk_level"),
+                    "heart_rate": last_patient.get("heart_rate"),
+                    "blood_pressure_systolic": last_patient.get("blood_pressure_systolic"),
+                    "blood_pressure_diastolic": last_patient.get("blood_pressure_diastolic"),
+                    "spo2": last_patient.get("spo2"),
+                    "symptoms": last_patient.get("symptoms", []),
+                    "recommended_department": last_patient.get("recommended_department")
+                 }
+                 try:
+                     explanation = await explain_risk_assessment(context)
+                     # Format the LLM JSON response into a string for the chat
+                     parts = [f"### Triage Analysis: {context['risk_level']}\n"]
+                     parts.append(f"**Department:** {context['recommended_department']}\n")
+                     parts.append(f"**Reasoning:** {explanation.get('department_reasoning')}\n")
+                     if explanation.get('disease_insights'):
+                         parts.append("**Insights:**")
+                         for i in explanation['disease_insights']:
+                             parts.append(f"- {i}")
+                     parts.append(f"\n_{explanation.get('safety_disclaimer')}_")
+                     return "\n".join(parts), {"mode": "risk_explanation", "step": step, "collected_symptoms": collected}
+                 except:
+                     pass # Fallback to static
+            
             reply = get_risk_explanation_reply(last_patient)
             return reply, {"mode": "risk_explanation", "step": step, "collected_symptoms": collected}
             
-    # Check for medical terms
-    term_reply = get_medical_term_reply(user_message)
-    if term_reply:
-        return term_reply, {"mode": "medical", "step": step, "collected_symptoms": collected}
-
-    if "start over" in msg or "reset" in msg:
-        return GUIDED_QUESTIONS[0], {"mode": "guided", "step": 1, "collected_symptoms": []}
+    # Check for medical terms - Use LLM if key exists, else fallback
+    import os
+    if os.getenv("OPENAI_API_KEY") and len(msg.split()) > 2:
+        # If message is long enough to be a question and we have LLM
+        # But exclude simple "done" or symptom listing if we are in guided mode...
+        # Actually, let's keep guided mode strictly for symptoms unless explicitly asked
+        pass 
 
     # Default to Guided Intake
     reply, next_step, updated_symptoms = get_guided_reply(step, user_message, collected)
+    
+    # If guided flow didn't progress (user said something else) OR finished
+    if next_step == step and not updated_symptoms:
+         # Try LLM for general medical Q&A
+         import os
+         from app.llm import medical_chat
+         if os.getenv("OPENAI_API_KEY"):
+             llm_reply = await medical_chat([{"role": "user", "content": user_message}])
+             return llm_reply, {"mode": "medical_qa", "step": step, "collected_symptoms": collected}
+
     return reply, {"mode": "guided", "step": next_step, "collected_symptoms": updated_symptoms}

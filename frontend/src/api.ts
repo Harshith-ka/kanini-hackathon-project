@@ -12,8 +12,8 @@ function getHeaders(contentType: string | null = 'application/json') {
 
 export async function login(username: string, password: string): Promise<{ access_token: string; role: string; username: string; full_name?: string }> {
   const formData = new URLSearchParams()
-  formData.append('username', username)
-  formData.append('password', password)
+  formData.append('username', username.trim())
+  formData.append('password', password.trim())
 
   const r = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
@@ -54,7 +54,8 @@ export async function addPatient(body: Record<string, unknown>): Promise<Patient
   })
   if (!r.ok) {
     const err = await r.json().catch(() => ({ detail: r.statusText }))
-    throw new Error(err.detail || 'Failed to add patient')
+    const msg = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)
+    throw new Error(msg || 'Failed to add patient')
   }
   return r.json()
 }
@@ -186,7 +187,7 @@ export async function retrainModel(nSamples = 2500): Promise<{ ok: boolean; summ
 }
 
 // New Endpoints
-export async function registerPatient(data: { full_name: string; email: string; age: number; gender: string; phone?: string }) {
+export async function registerPatient(data: { full_name: string; email: string; username?: string; age: number; gender: string; phone?: string }) {
   const r = await fetch(`${BASE}/api/admin/register-patient`, {
     method: 'POST',
     headers: getHeaders(),
