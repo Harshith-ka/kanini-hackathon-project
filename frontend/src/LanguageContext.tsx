@@ -31,6 +31,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   )
 }
 
+import { t } from './i18n'
+
 export function useLanguage() {
-  return useContext(LangContext)
+  const ctx = useContext(LangContext)
+  return { ...ctx, t: (key: string) => t(ctx.lang, key) }
 }

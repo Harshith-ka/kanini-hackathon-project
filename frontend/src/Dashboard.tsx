@@ -3,6 +3,7 @@ import { getDashboard, getDepartmentStatus, getPatients, addSimulatedPatient, si
 import type { DashboardData, DepartmentStatus, PatientResponse } from './types'
 import { useLanguage } from './LanguageContext'
 import { t } from './i18n'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function Dashboard() {
   const { lang } = useLanguage()
@@ -120,42 +121,65 @@ export default function Dashboard() {
                 <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {patients.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No patients currently in queue</td></tr>
-              ) : (
-                patients.map((p) => (
-                  <tr key={p.patient_id} style={{ borderBottom: '1px solid var(--border-light)', transition: 'all 0.2s' }} className="table-row-hover">
-                    <td style={{ padding: '20px 24px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{p.patient_id.slice(0, 8)}...</td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.risk_level === 'high' ? 'var(--critical)' : p.risk_level === 'medium' ? 'var(--warning)' : 'var(--success)' }}></div>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{p.risk_level.toUpperCase()}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{p.confidence_score}%</span>
-                        <div style={{ width: 60, height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${p.confidence_score}%`, height: '100%', background: 'var(--accent)' }}></div>
+            <tbody style={{ position: 'relative' }}>
+              <AnimatePresence mode="popLayout">
+                {patients.length === 0 ? (
+                  <motion.tr
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    key="empty"
+                  >
+                    <td colSpan={6} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No patients currently in queue</td>
+                  </motion.tr>
+                ) : (
+                  patients.map((p) => (
+                    <motion.tr
+                      key={p.patient_id}
+                      layout
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      style={{ borderBottom: '1px solid var(--border-light)', background: '#fff' }}
+                      className="table-row-hover"
+                    >
+                      <td style={{ padding: '20px 24px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{p.patient_id.slice(0, 8)}...</td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.risk_level === 'high' ? 'var(--critical)' : p.risk_level === 'medium' ? 'var(--warning)' : 'var(--success)' }}></div>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{p.risk_level.toUpperCase()}</span>
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px', color: 'var(--text)', fontWeight: 500, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {(p.symptoms || []).map(s => s.replace(/_/g, ' ')).join(', ')}
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{p.recommended_department}</div>
-                    </td>
-                    <td style={{ padding: '20px 24px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                        <button onClick={() => setSelectedPatient(p)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>View</button>
-                        <button onClick={() => handleDischarge(p.patient_id)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid #fee2e2', fontSize: 12, color: 'var(--critical)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>Discharge</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                      </td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{p.confidence_score}%</span>
+                          <div style={{ width: 60, height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${p.confidence_score}%` }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                              style={{ height: '100%', background: 'var(--accent)' }}
+                            ></motion.div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '20px 24px', color: 'var(--text)', fontWeight: 500, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {(p.symptoms || []).map(s => s.replace(/_/g, ' ')).join(', ')}
+                      </td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{p.recommended_department}</div>
+                      </td>
+                      <td style={{ padding: '20px 24px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                          <button onClick={() => setSelectedPatient(p)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>View</button>
+                          <button onClick={() => handleDischarge(p.patient_id)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid #fee2e2', fontSize: 12, color: 'var(--critical)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>Discharge</button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
+              </AnimatePresence>
             </tbody>
           </table>
 
@@ -227,6 +251,46 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Throughput Intelligence */}
+        {data.throughput_metrics && (
+          <div className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: 20, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Throughput Intelligence</span>
+              <span style={{ color: 'var(--success)' }}>● LIVE</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ padding: '1rem', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 800, marginBottom: 4 }}>AVG WAIT</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{data.throughput_metrics.avg_wait_time}<span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>MIN</span></div>
+              </div>
+              <div style={{ padding: '1rem', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 800, marginBottom: 4 }}>EFFICIENCY</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent)' }}>{data.throughput_metrics.efficiency_score}%</div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
+                <span style={{ color: '#64748b' }}>Capacity Utilization</span>
+                <span style={{ color: '#0f172a' }}>{data.throughput_metrics.capacity_utilization}%</span>
+              </div>
+              <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${data.throughput_metrics.capacity_utilization}%`, height: '100%', background: 'var(--accent)', transition: 'width 1s ease-out' }}></div>
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', background: data.throughput_metrics.system_load === 'High' ? '#fee2e2' : '#f0fdf4', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18 }}>{data.throughput_metrics.system_load === 'High' ? '🔥' : '⚙️'}</span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: data.throughput_metrics.system_load === 'High' ? '#b91c1c' : '#166534' }}>System Load: {data.throughput_metrics.system_load}</div>
+                <div style={{ fontSize: 10, color: data.throughput_metrics.system_load === 'High' ? '#ef4444' : '#22c55e' }}>{data.throughput_metrics.system_load === 'High' ? 'Scaling resources recommended' : 'Operating within optimal limits'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* Department Load */}
         <div className="glass-card" style={{ padding: '2rem' }}>

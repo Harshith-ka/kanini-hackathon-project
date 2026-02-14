@@ -9,6 +9,7 @@ import Register from './Register'
 import PatientDashboard from './PatientDashboard'
 import { logout } from './api'
 import { useLanguage } from './LanguageContext'
+import { Toaster } from 'react-hot-toast'
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'admin' | 'patient' }) {
   const token = localStorage.getItem('triage_token')
@@ -43,6 +44,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+      <Toaster position="top-right" toastOptions={{ style: { background: '#334155', color: '#fff' } }} />
       {/* Navigation Command Center */}
       {token && !isPublicRoute && (
         <aside style={{

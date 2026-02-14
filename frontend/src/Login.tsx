@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { login } from './api'
 import { useLanguage } from './LanguageContext'
 import { t } from './i18n'
+import toast from 'react-hot-toast'
 
 export default function Login() {
     const { lang } = useLanguage()
@@ -23,6 +24,7 @@ export default function Login() {
         setError(null)
         try {
             const res = await login(username, password)
+            toast.success(`Welcome back, ${res.full_name || res.username}!`)
             // Role-based routing logic
             if (res.role === 'admin') {
                 navigate('/')
@@ -31,6 +33,7 @@ export default function Login() {
             }
         } catch (err: any) {
             setError(err.message || 'Authentication failed. Please check your credentials.')
+            toast.error('Login failed: ' + (err.message || 'Invalid credentials'))
         } finally {
             setLoading(false)
         }

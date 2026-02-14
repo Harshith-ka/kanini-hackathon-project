@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { addPatient, uploadEhr } from './api'
 import type { PatientResponse } from './types'
 import VoiceInput from './VoiceInput'
+import toast from 'react-hot-toast'
+import BodyMap from './components/BodyMap'
 
 const SYMPTOM_LABELS: Record<string, string> = {
   chest_pain: 'Chest pain',
@@ -330,61 +332,75 @@ export default function AddPatient() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: '2rem' }}>
 
         {/* Symptom Collection */}
-        <div className="glass-card" style={{ padding: '2.5rem', background: '#fff', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64748b', fontWeight: 900 }}>
-              🚩 Presenting Symptom Complex
-            </h3>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--accent)', background: 'var(--accent-soft)', padding: '4px 10px', borderRadius: 6 }}>VOICE ENABLED</div>
-          </div>
-
-          <div style={{ border: '1px solid var(--border)', background: '#f8fafc', borderRadius: 20, padding: '2rem', minHeight: 220, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: '2.5rem' }}>
-              {form.symptoms.length === 0 && (
-                <div style={{ color: '#94a3b8', fontSize: 15, fontStyle: 'italic', textAlign: 'center', width: '100%', padding: '40px 0', opacity: 0.8 }}>
-                  No symptoms mapped. Utilize the clinical selectors below or activate voice transcription.
-                </div>
-              )}
-              {form.symptoms.map(s => (
-                <div key={s} style={{
-                  padding: '10px 18px', background: 'var(--accent)',
-                  color: '#fff', borderRadius: 12, fontSize: 14,
-                  display: 'flex', alignItems: 'center', gap: 12, fontWeight: 800,
-                  boxShadow: '0 8px 16px var(--accent-glow)'
-                }}>
-                  {SYMPTOM_LABELS[s] || s}
-                  <button onClick={() => toggleSymptom(s)} style={{ border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', padding: '2px 6px', borderRadius: '6px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
-                </div>
-              ))}
+        <div className="glass-card" style={{ padding: '2.5rem', background: '#fff', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 240px', gap: '2rem' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64748b', fontWeight: 900 }}>
+                🚩 Presenting Symptom Complex
+              </h3>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--accent)', background: 'var(--accent-soft)', padding: '4px 10px', borderRadius: 6 }}>VOICE ENABLED</div>
             </div>
 
-            <div style={{ marginTop: 'auto' }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 12, height: 1, background: '#cbd5e1' }}></span>
-                Clinical Quick-Select
-                <span style={{ width: 12, height: 1, background: '#cbd5e1' }}></span>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {['chest_pain', 'shortness_of_breath', 'fever', 'headache', 'dizziness', 'abdominal_pain', 'stroke_symptoms', 'seizure'].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => toggleSymptom(s)}
-                    style={{
-                      padding: '10px 16px', background: form.symptoms.includes(s) ? 'var(--accent-soft)' : '#fff',
-                      border: '1px solid', borderColor: form.symptoms.includes(s) ? 'var(--accent)' : 'var(--border)',
-                      borderRadius: 12, fontSize: 13, color: form.symptoms.includes(s) ? 'var(--accent)' : '#475569',
-                      fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
-                    }}
-                  >
-                    {SYMPTOM_LABELS[s]}
-                  </button>
+            <div style={{ border: '1px solid var(--border)', background: '#f8fafc', borderRadius: 20, padding: '2rem', minHeight: 220, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: '2.5rem' }}>
+                {form.symptoms.length === 0 && (
+                  <div style={{ color: '#94a3b8', fontSize: 15, fontStyle: 'italic', textAlign: 'center', width: '100%', padding: '40px 0', opacity: 0.8 }}>
+                    No symptoms mapped. Utilize the clinical selectors below or activate voice transcription.
+                  </div>
+                )}
+                {form.symptoms.map(s => (
+                  <div key={s} style={{
+                    padding: '10px 18px', background: 'var(--accent)',
+                    color: '#fff', borderRadius: 12, fontSize: 14,
+                    display: 'flex', alignItems: 'center', gap: 12, fontWeight: 800,
+                    boxShadow: '0 8px 16px var(--accent-glow)'
+                  }}>
+                    {SYMPTOM_LABELS[s] || s}
+                    <button onClick={() => toggleSymptom(s)} style={{ border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', padding: '2px 6px', borderRadius: '6px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  </div>
                 ))}
               </div>
+
+              <div style={{ marginTop: 'auto' }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 12, height: 1, background: '#cbd5e1' }}></span>
+                  Clinical Quick-Select
+                  <span style={{ width: 12, height: 1, background: '#cbd5e1' }}></span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {['chest_pain', 'shortness_of_breath', 'fever', 'headache', 'dizziness', 'abdominal_pain', 'stroke_symptoms', 'seizure'].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => toggleSymptom(s)}
+                      style={{
+                        padding: '10px 16px', background: form.symptoms.includes(s) ? 'var(--accent-soft)' : '#fff',
+                        border: '1px solid', borderColor: form.symptoms.includes(s) ? 'var(--accent)' : 'var(--border)',
+                        borderRadius: 12, fontSize: 13, color: form.symptoms.includes(s) ? 'var(--accent)' : '#475569',
+                        fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
+                      }}
+                    >
+                      {SYMPTOM_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: '2.5rem' }}>
+              <VoiceInput onTranscript={extractSymptomsFromVoice} />
             </div>
           </div>
 
-          <div style={{ marginTop: '2.5rem' }}>
-            <VoiceInput onTranscript={extractSymptomsFromVoice} />
+          <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 12, textAlign: 'center', letterSpacing: '0.05em' }}>Interactive Body Map</label>
+            <BodyMap
+              onSelectPart={(part: string) => {
+                if (!form.symptoms.includes(part)) {
+                  toggleSymptom(part);
+                  toast.success(`Added ${part}`);
+                }
+              }}
+              selectedParts={form.symptoms}
+            />
           </div>
         </div>
 

@@ -5,6 +5,9 @@ import io
 from datetime import datetime
 import os
 from uuid import uuid4
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from typing import Optional, List, Any
 from contextlib import asynccontextmanager
@@ -124,12 +127,35 @@ def _generate_patient_id() -> str:
 
 
 def _update_estimated_waits(store: list[dict]) -> None:
-    """Set estimated_wait_minutes for each patient by queue position and priority."""
+    """Set estimated_wait_minutes for each patient by queue position, priority, and department load."""
+    if not store:
+        return
+        
+    # Standardize priority scores (0-100)
+    # Group by department to calculate local load
+    dept_load = {}
+    for p in store:
+        dept = p.get("recommended_department", "General Medicine")
+        dept_load[dept] = dept_load.get(dept, 0) + 1
+
+    # Pressure from high risk patients (affects everyone)
+    high_risk_count = sum(1 for p in store if p.get("risk_level") == "high")
+    resource_pressure = 1.0 + (high_risk_count * 0.15) # +15% per high risk patient
+
     ordered = sorted(store, key=lambda p: (-p.get("priority_score", 0), p.get("created_at", "")))
+    
     for i, p in enumerate(ordered):
+        dept = p.get("recommended_department", "General Medicine")
+        load_factor = 1.0 + (dept_load.get(dept, 1) * 0.1) # +10% per patient in same dept
+        
         priority = p.get("priority_score", 50)
-        priority_factor = max(1, priority / 50)
-        p["estimated_wait_minutes"] = max(0, int(BASE_WAIT_MINUTES * (i + 1) / priority_factor))
+        # Higher priority = lower wait time
+        priority_factor = max(0.5, priority / 50.0)
+        
+        # Base wait scaled by position, load, and global pressure
+        minutes = int((BASE_WAIT_MINUTES * (i + 1) * load_factor * resource_pressure) / priority_factor)
+        p["estimated_wait_minutes"] = max(5, minutes) # Min 5 mins
+
 
 
 @app.post("/api/patients", response_model=PatientResponse)
@@ -183,7 +209,28 @@ async def add_patient(
         reasoning = reasoning + " " + routing_message
         
     priority = risk_to_priority_score(risk_level, confidence)
-    explain = get_explainability(
+    
+    # AI Explanation Integration
+    ai_res = None
+    if os.getenv("OPENAI_API_KEY"):
+        try:
+            from app.llm import explain_risk_assessment
+            ai_context = {
+                "risk_level": risk_level,
+                "heart_rate": data.heart_rate,
+                "blood_pressure_systolic": data.blood_pressure_systolic,
+                "blood_pressure_diastolic": data.blood_pressure_diastolic,
+                "spo2": data.spo2,
+                "symptoms": data.symptoms,
+                "recommended_department": dept
+            }
+            ai_res = await explain_risk_assessment(ai_context)
+            # Update reasoning with AI output
+            reasoning = ai_res.get("department_reasoning", reasoning)
+        except Exception as e:
+            print(f"AI Generation Failed: {e}")
+
+    expert_system_explain = get_explainability(
         age=data.age,
         gender=data.gender.value,
         heart_rate=data.heart_rate,
@@ -199,6 +246,18 @@ async def add_patient(
         risk_level=risk_level,
         recommended_department=dept,
     )
+
+    
+    # Merge AI results into explainability
+    final_explain_dict = expert_system_explain.model_dump()
+    if ai_res:
+        final_explain_dict["department_reasoning"] = ai_res.get("department_reasoning", final_explain_dict["department_reasoning"])
+        final_explain_dict["disease_insights"] = ai_res.get("disease_insights", [])
+        if ai_res.get("top_contributing_features"):
+             final_explain_dict["top_contributing_features"] = ai_res.get("top_contributing_features")
+        if ai_res.get("safety_disclaimer"):
+             final_explain_dict["safety_disclaimer"] = ai_res.get("safety_disclaimer")
+
     severity_timeline = predict_severity_timeline(
         risk_level=risk_level,
         spo2=data.spo2,
@@ -251,7 +310,9 @@ async def add_patient(
         risk_level=risk_level,
         priority_score=priority,
         recommended_department=dept,
-        user_id=target_user_id
+        reasoning_summary=reasoning,
+        user_id=target_user_id,
+        explainability=final_explain_dict
     )
     db.add(new_record)
     await db.commit()
@@ -263,13 +324,8 @@ async def add_patient(
         medium=prob_breakdown.get("medium", 0),
         high=prob_breakdown.get("high", 0),
     )
-    explainability = Explainability(
-        top_contributing_features=explain["top_contributing_features"],
-        abnormal_vitals=explain["abnormal_vitals"],
-        department_reasoning=explain["department_reasoning"],
-        shap_contributions=explain.get("shap_contributions"),
-        feature_importance=explain.get("feature_importance"),
-    )
+    # The explainability object is already in final_explain_dict
+    # We can reconstruct it or just use the dict if schemas allow
     patient_id = _generate_patient_id()
     created_at = new_record.created_at.isoformat() + "Z"
  
@@ -299,7 +355,7 @@ async def add_patient(
         "severity_timeline": severity_timeline,
         "estimated_wait_minutes": None,
         "reasoning_summary": reasoning,
-        "explainability": explainability.model_dump(),
+        "explainability": final_explain_dict,
         "created_at": created_at,
     }
     return PatientResponse(**record)
@@ -328,16 +384,29 @@ async def departments_status(db: AsyncSession = Depends(get_db)):
 
 @app.get("/api/dashboard")
 async def dashboard(db: AsyncSession = Depends(get_db)):
-    """Overview from DB."""
+    """Overview from DB with throughput metrics."""
     result = await db.execute(select(PatientRecord))
     patients = [p.__dict__ for p in result.scalars().all()]
+    
     high = sum(1 for p in patients if p.get("risk_level") == "high")
     medium = sum(1 for p in patients if p.get("risk_level") == "medium")
     low = sum(1 for p in patients if p.get("risk_level") == "low")
+    
+    # Calculate throughput metrics
+    wait_times = [p.get("estimated_wait_minutes") for p in patients if p.get("estimated_wait_minutes")]
+    avg_wait = sum(wait_times) / len(wait_times) if wait_times else 0
+    
+    # Throughput efficiency (simplified: lower wait + higher priority handled = higher efficiency)
+    efficiency = 0
+    if patients:
+        avg_priority = sum(p.get("priority_score", 0) for p in patients) / len(patients)
+        efficiency = min(100, max(0, int(avg_priority - (avg_wait * 0.5) + 50)))
+
     dept_counts: dict[str, int] = {}
     for p in patients:
         d = p.get("recommended_department", "General Medicine")
         dept_counts[d] = dept_counts.get(d, 0) + 1
+        
     return {
         "total_patients_today": len(patients),
         "high_risk_count": high,
@@ -345,7 +414,14 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
         "low_risk_count": low,
         "risk_distribution": {"high": high, "medium": medium, "low": low},
         "department_distribution": dept_counts,
+        "throughput_metrics": {
+            "avg_wait_time": int(avg_wait),
+            "efficiency_score": efficiency,
+            "system_load": "High" if len(patients) > 15 else "Moderate" if len(patients) > 5 else "Optimal",
+            "capacity_utilization": min(100, int((len(patients) / 30) * 100)) # Assumes 30 is max capacity for demo
+        }
     }
+
 
 
 @app.get("/api/symptoms")
@@ -490,13 +566,85 @@ async def update_patient(
     if not record:
         raise HTTPException(status_code=404, detail="Patient not found")
     
-    for key, value in data.model_dump(exclude_unset=True).items():
+    # Logic to re-run analysis if vitals are updated
+    update_data = data.model_dump(exclude_unset=True)
+    if not update_data:
+        return record
+
+    for key, value in update_data.items():
         setattr(record, key, value)
     
-    # If vitals changed, we should ideally re-run ml.predict_risk
-    # and update risk_level, priority_score, etc.
-    # For now, we'll just commit the changes.
+    # Check if any vital signs or symptoms were updated
+    vitals_keys = {
+        "age", "heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic",
+        "temperature", "spo2", "respiratory_rate", "pain_score", 
+        "chronic_disease_count", "symptom_duration", "gender", "symptoms"
+    }
     
+    if any(k in update_data for k in vitals_keys):
+        # Re-run risk prediction
+        try:
+            # Need to ensure all required fields are present (fallback to existing record values)
+            pred = predict_risk(
+                age=record.age,
+                gender=record.gender,
+                heart_rate=record.heart_rate,
+                blood_pressure_systolic=record.blood_pressure_systolic,
+                blood_pressure_diastolic=record.blood_pressure_diastolic,
+                temperature=record.temperature,
+                spo2=record.spo2,
+                chronic_disease_count=record.chronic_disease_count,
+                respiratory_rate=record.respiratory_rate,
+                pain_score=record.pain_score,
+                symptom_duration=record.symptom_duration,
+                symptoms=record.symptoms or [] # Handle potential None
+            )
+            
+            record.risk_level = pred["risk_level"]
+            record.confidence_score = pred["confidence_score"]
+            # We would also update probability_breakdown etc if stored in DB
+            
+            # Recalculate priority
+            record.priority_score = risk_to_priority_score(record.risk_level, record.confidence_score)
+            
+            # Re-recommend department if not manually overridden
+            if "recommended_department" not in update_data:
+                dept, reasoning = recommend_department(record.risk_level, record.symptoms or [])
+                record.recommended_department = dept
+
+            # AI Re-Analysis
+            if os.getenv("OPENAI_API_KEY"):
+                try:
+                    from app.llm import explain_risk_assessment
+                    ai_context = {
+                        "risk_level": record.risk_level,
+                        "heart_rate": record.heart_rate,
+                        "blood_pressure_systolic": record.blood_pressure_systolic,
+                        "blood_pressure_diastolic": record.blood_pressure_diastolic,
+                        "spo2": record.spo2,
+                        "symptoms": record.symptoms or [],
+                        "recommended_department": record.recommended_department
+                    }
+                    ai_res = await explain_risk_assessment(ai_context)
+                    record.reasoning_summary = ai_res.get("department_reasoning", reasoning)
+                    
+                    # Update explainability in DB
+                    # We need to reconstruct or fetch existing explainability
+                    current_explain = record.explainability or {}
+                    # If it's empty, we might want to run expert_system first, but for now let's just patch it
+                    current_explain["department_reasoning"] = ai_res.get("department_reasoning")
+                    current_explain["disease_insights"] = ai_res.get("disease_insights", [])
+                    current_explain["top_contributing_features"] = ai_res.get("top_contributing_features", current_explain.get("top_contributing_features", []))
+                    record.explainability = current_explain
+                    
+                except Exception as e:
+                    print(f"AI Re-Analysis Failed: {e}")
+                
+        except Exception as e:
+            print(f"Error re-calculating risk: {e}")
+            # Continue with update even if ML fails
+            pass
+
     await db.commit()
     await db.refresh(record)
     return record
@@ -549,11 +697,12 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @app.post("/api/ehr/upload")
-def ehr_upload(file: UploadFile = File(...)):
+async def ehr_upload(file: UploadFile = File(...)):
     """Upload PDF or TXT; extract text and symptoms; return highlights for auto-fill."""
-    content = file.file.read()
+    content = await file.read()
     result = process_ehr_upload(content, file.filename or "upload")
     return result
+
 
 
 class SimulationAddRequest(BaseModel):

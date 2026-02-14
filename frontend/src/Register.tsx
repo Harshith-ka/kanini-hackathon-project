@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { register } from './api'
 import { useLanguage } from './LanguageContext'
 import { t } from './i18n'
+import toast from 'react-hot-toast'
 
 export default function Register() {
     const { lang } = useLanguage()
@@ -34,10 +35,11 @@ export default function Register() {
                 password: form.password,
                 role: 'patient'
             })
-            alert('Registration successful! Please login.')
+            toast.success('Registration successful! Please login.')
             navigate('/login')
         } catch (err: any) {
             setError(err.message || 'Registration failed. Please try again.')
+            toast.error(err.message || 'Registration failed')
         } finally {
             setLoading(false)
         }

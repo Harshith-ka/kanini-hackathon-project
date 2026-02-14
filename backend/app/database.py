@@ -1,6 +1,7 @@
 # Database setup
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import JSON
 from typing import Optional
 import datetime
 
@@ -47,6 +48,8 @@ class PatientRecord(Base):
     is_active: Mapped[bool] = mapped_column(default=True) # False if discharged
     created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
     user_id: Mapped[Optional[int]] = mapped_column(index=True)
+    reasoning_summary: Mapped[Optional[str]] = mapped_column()
+    explainability: Mapped[Optional[dict]] = mapped_column(type_=JSON)
 
 async def init_db():
     async with engine.begin() as conn:

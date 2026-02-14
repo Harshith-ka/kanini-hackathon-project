@@ -5,8 +5,8 @@ from openai import AsyncOpenAI
 from typing import List, Dict, Any
 
 # Initialize OpenAI client
-# Ensure OPENAI_API_KEY is set in environment variables
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=api_key) if api_key else None
 
 SAFETY_SYSTEM_PROMPT = """
 You are a highly experienced clinical explanation assistant for a triage system.
@@ -28,6 +28,9 @@ async def explain_risk_assessment(context: Dict[str, Any], language: str = "en")
     Generates a structured explanation of the risk assessment using OpenAI.
     """
     try:
+        if not client:
+            raise ValueError("OpenAI API Key not set")
+
         # Construct a structured prompt
         prompt = f"""
         Analyze the following patient triage data and provide a patient-friendly explanation.
@@ -79,6 +82,9 @@ async def medical_chat(history: List[Dict[str, str]], language: str = "en") -> s
     Handles general medical Q&A with safety guardrails.
     """
     try:
+        if not client:
+            return "I apologize, but I cannot process this request at the moment. Please contact a nurse."
+
         system_msg = SAFETY_SYSTEM_PROMPT + f"\nRespond in {language}."
         
         # Keep only last 5 messages to save context/cost

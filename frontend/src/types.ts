@@ -27,6 +27,8 @@ export interface Explainability {
   wait_time_estimate?: string
   shap_contributions?: ShapContribution[] | null
   feature_importance?: FeatureImportance[] | null
+  disease_insights?: string[]
+  safety_disclaimer?: string
 }
 
 export interface ChatState {
@@ -95,4 +97,28 @@ export interface DashboardData {
   low_risk_count: number
   risk_distribution: { high: number; medium: number; low: number }
   department_distribution: Record<string, number>
+  throughput_metrics?: {
+    avg_wait_time: number
+    efficiency_score: number
+    system_load: string
+    capacity_utilization: number
+  }
+}
+
+
+export interface PatientDashboardResponse {
+  has_record: boolean
+  message?: string
+  record: PatientResponse
+  queue_position: number
+  estimated_wait_minutes: number
+  user_profile: { full_name: string }
+}
+
+export interface PatientUpdate {
+  heart_rate?: number
+  blood_pressure_systolic?: number
+  blood_pressure_diastolic?: number
+  spo2?: number
+  symptoms?: string[]
 }
