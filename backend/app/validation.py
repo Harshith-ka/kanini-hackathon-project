@@ -10,6 +10,7 @@ VITAL_RANGES = {
     "blood_pressure_diastolic": (60, 80),
     "temperature": (36.1, 37.2),
     "spo2": (95, 100),
+    "respiratory_rate": (12, 20),
 }
 
 CRITICAL_THRESHOLDS = {
@@ -22,6 +23,8 @@ CRITICAL_THRESHOLDS = {
     "diastolic_low": 60,
     "temperature_high": 39.0,
     "temperature_low": 35.0,
+    "respiratory_high": 30,
+    "respiratory_low": 8,
 }
 
 
@@ -31,6 +34,7 @@ def get_abnormality_alerts(
     blood_pressure_diastolic: int,
     temperature: float,
     spo2: int,
+    respiratory_rate: int,
 ) -> list[AbnormalityAlert]:
     """Generate abnormality alerts from vitals."""
     alerts: list[AbnormalityAlert] = []
@@ -116,6 +120,31 @@ def get_abnormality_alerts(
             AbnormalityAlert(
                 field="temperature",
                 message=f"Elevated temperature ({temperature}°C). Normal 36.1–37.2°C.",
+                severity="warning",
+            )
+        )
+
+    if respiratory_rate >= CRITICAL_THRESHOLDS["respiratory_high"]:
+        alerts.append(
+            AbnormalityAlert(
+                field="respiratory_rate",
+                message=f"Respiratory rate critically high ({respiratory_rate} bpm).",
+                severity="critical",
+            )
+        )
+    elif respiratory_rate < CRITICAL_THRESHOLDS["respiratory_low"]:
+        alerts.append(
+            AbnormalityAlert(
+                field="respiratory_rate",
+                message=f"Respiratory rate critically low ({respiratory_rate} bpm).",
+                severity="critical",
+            )
+        )
+    elif respiratory_rate < VITAL_RANGES["respiratory_rate"][0] or respiratory_rate > VITAL_RANGES["respiratory_rate"][1]:
+        alerts.append(
+            AbnormalityAlert(
+                field="respiratory_rate",
+                message=f"Respiratory rate outside normal range ({respiratory_rate} bpm). Normal 12–20.",
                 severity="warning",
             )
         )

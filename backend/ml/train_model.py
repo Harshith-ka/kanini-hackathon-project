@@ -17,7 +17,10 @@ from ml.preprocessing import ALL_FEATURES, GENDER_MAP
 # Risk levels for classification
 RISK_LABELS = ["low", "medium", "high"]
 MODEL_DIR = Path(__file__).resolve().parent / "artifacts"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 MODEL_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(exist_ok=True)
+DATASET_PATH = DATA_DIR / "triage_dataset.csv"
 
 
 def generate_synthetic_data(n_samples: int = 2000) -> pd.DataFrame:
@@ -32,18 +35,26 @@ def generate_synthetic_data(n_samples: int = 2000) -> pd.DataFrame:
     bp_dia = np.clip(bp_sys * np.random.uniform(0.55, 0.75, n), 50, 120).astype(int)
     temperature = np.clip(np.random.normal(36.8, 0.8, n), 35.0, 40.0)
     spo2 = np.clip(np.random.normal(97, 4, n).astype(int), 75, 100)
+    chronic_disease_count = np.clip(np.random.poisson(1.5, n), 0, 10)
+    respiratory_rate = np.clip(np.random.normal(18, 5, n).astype(int), 8, 50)
+    pain_score = np.clip(np.random.normal(3, 3, n).astype(int), 0, 10)
+    symptom_duration = np.clip(np.random.exponential(24, n).astype(int), 1, 720)
 
-    # Introduce high-risk patterns: low SpO2, very high HR, chest pain, etc.
+    # Introduce high-risk patterns: low SpO2, very high HR, high RR, high pain, etc.
     high_risk_mask = (
         (spo2 < 92)
         | (heart_rate > 120)
-        | (np.random.random(n) < 0.15)
+        | (respiratory_rate > 30)
+        | (pain_score > 8)
+        | (np.random.random(n) < 0.1)
     )
     medium_risk_mask = (
         (spo2 < 95) & (spo2 >= 92)
         | (heart_rate > 100) & (heart_rate <= 120)
         | (temperature > 38)
-        | (np.random.random(n) < 0.25)
+        | (respiratory_rate > 24) & (respiratory_rate <= 30)
+        | (pain_score > 6) & (pain_score <= 8)
+        | (np.random.random(n) < 0.15)
     ) & ~high_risk_mask
     low_risk_mask = ~high_risk_mask & ~medium_risk_mask
 
@@ -78,6 +89,10 @@ def generate_synthetic_data(n_samples: int = 2000) -> pd.DataFrame:
         "blood_pressure_diastolic": bp_dia[idx],
         "temperature": temperature[idx],
         "spo2": spo2[idx],
+        "chronic_disease_count": chronic_disease_count[idx],
+        "respiratory_rate": respiratory_rate[idx],
+        "pain_score": pain_score[idx],
+        "symptom_duration": symptom_duration[idx],
         "risk": [risk[i] for i in idx],
     })
 
@@ -103,10 +118,13 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
-def train(n_samples: int = 2500):
-    """Train and persist model + scaler. Returns (model, scaler, summary)."""
+def train(n_samples: int = 2500, save_dataset: bool = True):
+    """Train and persist model + scaler. Saves dataset to data/triage_dataset.csv. Returns (model, scaler, summary)."""
     print("Generating synthetic data...")
     df = generate_synthetic_data(n_samples)
+    if save_dataset:
+        df.to_csv(DATASET_PATH, index=False)
+        print(f"Dataset saved to {DATASET_PATH}")
     X = build_features(df)
     y = df["risk"].values
 

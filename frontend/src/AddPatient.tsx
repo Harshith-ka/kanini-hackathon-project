@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { addPatient, getSymptoms, uploadEhr } from './api'
 import type { PatientResponse } from './types'
 import VoiceInput from './VoiceInput'
@@ -47,6 +47,10 @@ const defaultForm = {
   blood_pressure_diastolic: '',
   temperature: '',
   spo2: '',
+  chronic_disease_count: '0',
+  respiratory_rate: '',
+  pain_score: '0',
+  symptom_duration: '',
   pre_existing_conditions: '',
 }
 
@@ -66,7 +70,7 @@ export default function AddPatient() {
       try {
         const symptoms = JSON.parse(stored) as string[]
         if (symptoms.length) setForm((f) => ({ ...f, symptoms: [...new Set(symptoms)] }))
-      } catch {}
+      } catch { }
     }
   }, [])
 
@@ -87,7 +91,11 @@ export default function AddPatient() {
     const dia = parseInt(form.blood_pressure_diastolic, 10)
     const temp = parseFloat(form.temperature)
     const spo2 = parseInt(form.spo2, 10)
-    if (isNaN(age) || isNaN(hr) || isNaN(sys) || isNaN(dia) || isNaN(temp) || isNaN(spo2) || form.symptoms.length === 0) {
+    const cdc = parseInt(form.chronic_disease_count, 10)
+    const rr = parseInt(form.respiratory_rate, 10)
+    const ps = parseInt(form.pain_score, 10)
+    const sd = parseInt(form.symptom_duration, 10)
+    if (isNaN(age) || isNaN(hr) || isNaN(sys) || isNaN(dia) || isNaN(temp) || isNaN(spo2) || isNaN(cdc) || isNaN(rr) || isNaN(ps) || isNaN(sd) || form.symptoms.length === 0) {
       setError('Please fill all required fields and select at least one symptom.')
       return
     }
@@ -102,6 +110,10 @@ export default function AddPatient() {
         blood_pressure_diastolic: dia,
         temperature: temp,
         spo2,
+        chronic_disease_count: cdc,
+        respiratory_rate: rr,
+        pain_score: ps,
+        symptom_duration: sd,
         pre_existing_conditions: form.pre_existing_conditions ? form.pre_existing_conditions.split(',').map((s) => s.trim()).filter(Boolean) : [],
       })
       setResult(res)
@@ -272,6 +284,53 @@ export default function AddPatient() {
               max={100}
               value={form.spo2}
               onChange={(e) => setForm((p) => ({ ...p, spo2: e.target.value }))}
+              style={{ width: '100%', padding: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4, color: 'var(--text-muted)' }}>Respiratory Rate (bpm) *</span>
+            <input
+              type="number"
+              min={8}
+              max={50}
+              value={form.respiratory_rate}
+              onChange={(e) => setForm((p) => ({ ...p, respiratory_rate: e.target.value }))}
+              style={{ width: '100%', padding: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
+            />
+          </label>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4, color: 'var(--text-muted)' }}>Pain Score (0-10) *</span>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={form.pain_score}
+              onChange={(e) => setForm((p) => ({ ...p, pain_score: e.target.value }))}
+              style={{ width: '100%', padding: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4, color: 'var(--text-muted)' }}>Symptom Duration (hours) *</span>
+            <input
+              type="number"
+              min={1}
+              value={form.symptom_duration}
+              onChange={(e) => setForm((p) => ({ ...p, symptom_duration: e.target.value }))}
+              style={{ width: '100%', padding: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
+            />
+          </label>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4, color: 'var(--text-muted)' }}>Chronic Disease Count *</span>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              value={form.chronic_disease_count}
+              onChange={(e) => setForm((p) => ({ ...p, chronic_disease_count: e.target.value }))}
               style={{ width: '100%', padding: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
             />
           </label>

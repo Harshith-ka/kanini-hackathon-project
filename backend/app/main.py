@@ -65,6 +65,7 @@ def add_patient(data: PatientCreate):
         blood_pressure_diastolic=data.blood_pressure_diastolic,
         temperature=data.temperature,
         spo2=data.spo2,
+        respiratory_rate=data.respiratory_rate,
     )
     try:
         pred = predict_risk(
@@ -75,6 +76,10 @@ def add_patient(data: PatientCreate):
             blood_pressure_diastolic=data.blood_pressure_diastolic,
             temperature=data.temperature,
             spo2=data.spo2,
+            chronic_disease_count=data.chronic_disease_count,
+            respiratory_rate=data.respiratory_rate,
+            pain_score=data.pain_score,
+            symptom_duration=data.symptom_duration,
             symptoms=data.symptoms,
         )
     except FileNotFoundError:
@@ -99,6 +104,10 @@ def add_patient(data: PatientCreate):
         blood_pressure_diastolic=data.blood_pressure_diastolic,
         temperature=data.temperature,
         spo2=data.spo2,
+        chronic_disease_count=data.chronic_disease_count,
+        respiratory_rate=data.respiratory_rate,
+        pain_score=data.pain_score,
+        symptom_duration=data.symptom_duration,
         symptoms=data.symptoms,
         risk_level=risk_level,
         recommended_department=dept,
@@ -135,6 +144,10 @@ def add_patient(data: PatientCreate):
         "blood_pressure_diastolic": data.blood_pressure_diastolic,
         "temperature": data.temperature,
         "spo2": data.spo2,
+        "chronic_disease_count": data.chronic_disease_count,
+        "respiratory_rate": data.respiratory_rate,
+        "pain_score": data.pain_score,
+        "symptom_duration": data.symptom_duration,
         "pre_existing_conditions": data.pre_existing_conditions,
         "abnormality_alerts": [a.model_dump() for a in alerts],
         "risk_level": risk_level,
@@ -290,7 +303,8 @@ _EXPORT_COLUMNS = [
     "patient_id", "age", "gender", "risk_level", "confidence_score", "priority_score",
     "recommended_department", "routed_department", "routing_message", "severity_timeline",
     "estimated_wait_minutes", "heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic",
-    "temperature", "spo2", "symptoms", "created_at",
+    "temperature", "spo2", "chronic_disease_count", "respiratory_rate", 
+    "pain_score", "symptom_duration", "symptoms", "created_at",
 ]
 
 

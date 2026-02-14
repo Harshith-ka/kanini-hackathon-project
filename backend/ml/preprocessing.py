@@ -8,8 +8,16 @@ from app.schemas import SYMPTOM_OPTIONS
 # Feature order expected by the model (must match training)
 GENDER_MAP = {"male": 0, "female": 1, "other": 2}
 SYMPTOM_COLUMNS = [f"symptom_{s}" for s in SYMPTOM_OPTIONS]
-NUMERIC_FEATURES = ["age", "heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic", "temperature", "spo2"]
-ALL_FEATURES = ["age", "gender_enc", "heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic", "temperature", "spo2"] + SYMPTOM_COLUMNS
+NUMERIC_FEATURES = [
+    "age", "heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic", 
+    "temperature", "spo2", "chronic_disease_count", "respiratory_rate", 
+    "pain_score", "symptom_duration"
+]
+ALL_FEATURES = [
+    "age", "gender_enc", "heart_rate", "blood_pressure_systolic", 
+    "blood_pressure_diastolic", "temperature", "spo2", "chronic_disease_count", 
+    "respiratory_rate", "pain_score", "symptom_duration"
+] + SYMPTOM_COLUMNS
 
 
 def encode_symptoms(symptoms: list[str]) -> dict[str, int]:
@@ -25,6 +33,10 @@ def preprocess_single(
     blood_pressure_diastolic: int,
     temperature: float,
     spo2: int,
+    chronic_disease_count: int,
+    respiratory_rate: int,
+    pain_score: int,
+    symptom_duration: int,
     symptoms: list[str],
     scaler: StandardScaler,
 ) -> np.ndarray:
@@ -39,6 +51,10 @@ def preprocess_single(
         "blood_pressure_diastolic": blood_pressure_diastolic,
         "temperature": temperature,
         "spo2": spo2,
+        "chronic_disease_count": chronic_disease_count,
+        "respiratory_rate": respiratory_rate,
+        "pain_score": pain_score,
+        "symptom_duration": symptom_duration,
         **symptom_enc,
     }
     # Ensure column order

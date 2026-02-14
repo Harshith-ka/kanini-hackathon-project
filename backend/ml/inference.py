@@ -36,6 +36,10 @@ def predict_risk(
     blood_pressure_diastolic: int,
     temperature: float,
     spo2: int,
+    chronic_disease_count: int,
+    respiratory_rate: int,
+    pain_score: int,
+    symptom_duration: int,
     symptoms: list[str],
 ) -> dict:
     """
@@ -51,6 +55,10 @@ def predict_risk(
         blood_pressure_diastolic=blood_pressure_diastolic,
         temperature=temperature,
         spo2=spo2,
+        chronic_disease_count=chronic_disease_count,
+        respiratory_rate=respiratory_rate,
+        pain_score=pain_score,
+        symptom_duration=symptom_duration,
         symptoms=symptoms,
         scaler=scaler,
     )
@@ -92,6 +100,10 @@ def get_explainability(
     blood_pressure_diastolic: int,
     temperature: float,
     spo2: int,
+    chronic_disease_count: int,
+    respiratory_rate: int,
+    pain_score: int,
+    symptom_duration: int,
     symptoms: list[str],
     risk_level: str,
     recommended_department: str,
@@ -106,6 +118,10 @@ def get_explainability(
         blood_pressure_diastolic=blood_pressure_diastolic,
         temperature=temperature,
         spo2=spo2,
+        chronic_disease_count=chronic_disease_count,
+        respiratory_rate=respiratory_rate,
+        pain_score=pain_score,
+        symptom_duration=symptom_duration,
         symptoms=symptoms,
     )
     top_contributing = pred_result["top_contributing_features"]
@@ -113,6 +129,8 @@ def get_explainability(
     abnormal_vitals: list[dict] = []
     if spo2 < 95:
         abnormal_vitals.append({"name": "SpO2", "value": spo2, "normal_range": "95-100%"})
+    if respiratory_rate < 12 or respiratory_rate > 20:
+        abnormal_vitals.append({"name": "Respiratory Rate", "value": respiratory_rate, "normal_range": "12-20 bpm"})
     if heart_rate < 60 or heart_rate > 100:
         abnormal_vitals.append({"name": "Heart Rate", "value": heart_rate, "normal_range": "60-100 bpm"})
     if blood_pressure_systolic > 120 or blood_pressure_diastolic > 80:
@@ -134,7 +152,12 @@ def get_explainability(
                 age=age, gender=gender, heart_rate=heart_rate,
                 blood_pressure_systolic=blood_pressure_systolic,
                 blood_pressure_diastolic=blood_pressure_diastolic,
-                temperature=temperature, spo2=spo2, symptoms=symptoms, scaler=scaler,
+                temperature=temperature, spo2=spo2, 
+                chronic_disease_count=chronic_disease_count,
+                respiratory_rate=respiratory_rate,
+                pain_score=pain_score,
+                symptom_duration=symptom_duration,
+                symptoms=symptoms, scaler=scaler,
             )
             explainer = shap.TreeExplainer(model, feature_perturbation="interventional")
             shap_vals = explainer.shap_values(X)

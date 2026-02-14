@@ -47,6 +47,10 @@ class PatientCreate(BaseModel):
     blood_pressure_diastolic: int = Field(..., ge=40, le=150)
     temperature: float = Field(..., ge=35.0, le=43.0)
     spo2: int = Field(..., ge=70, le=100)
+    chronic_disease_count: int = Field(default=0, ge=0, le=20)
+    respiratory_rate: int = Field(..., ge=8, le=50)
+    pain_score: int = Field(..., ge=0, le=10)
+    symptom_duration: int = Field(..., ge=1, le=720)  # hours
     pre_existing_conditions: list[str] = Field(default_factory=list)
 
     @field_validator("blood_pressure_diastolic")
@@ -106,6 +110,10 @@ class PatientResponse(BaseModel):
     blood_pressure_diastolic: int
     temperature: float
     spo2: int
+    chronic_disease_count: int
+    respiratory_rate: int
+    pain_score: int
+    symptom_duration: int
     pre_existing_conditions: list[str]
     abnormality_alerts: list[AbnormalityAlert]
     risk_level: str

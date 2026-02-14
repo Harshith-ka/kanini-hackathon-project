@@ -7,6 +7,10 @@
     "blood_pressure_diastolic",
     "temperature",
     "spo2",
+    "chronic_disease_count",
+    "respiratory_rate",
+    "pain_score",
+    "symptom_duration",
     "symptom_chest_pain",
     "symptom_shortness_of_breath",
     "symptom_headache",
@@ -28,5 +32,13 @@
     "low",
     "medium"
   ],
-  "test_accuracy": 0.732
+  "test_accuracy": 0.81,
+  "version": "202602140653",
+  "trained_at": "2026-02-14T06:53:48.557698Z",
+  "synthetic_class_distribution": {
+    "high": 609,
+    "low": 529,
+    "medium": 1362
+  },
+  "synthetic_total": 2500
 }

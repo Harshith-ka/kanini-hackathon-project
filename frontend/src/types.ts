@@ -58,6 +58,10 @@ export interface PatientResponse {
   blood_pressure_diastolic: number
   temperature: number
   spo2: number
+  chronic_disease_count: number
+  respiratory_rate: number
+  pain_score: number
+  symptom_duration: number
   pre_existing_conditions: string[]
   abnormality_alerts: AbnormalityAlert[]
   risk_level: string
