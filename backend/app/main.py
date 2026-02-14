@@ -5,12 +5,19 @@ import io
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from typing import Optional, List, Any
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.chat import chat_turn
+from app.database import init_db, PatientRecord, User
+from app.auth import get_db, get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin
 from app.department import recommend_department, risk_to_priority_score
 from app.ehr import process_ehr_upload
 from app.fairness import compute_fairness_metrics
@@ -28,7 +35,13 @@ from app.schemas import (
 from app.validation import get_abnormality_alerts
 from ml.inference import get_explainability, predict_risk
 
-app = FastAPI(title="Triage API", version="1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+app = FastAPI(title="Triage API", version="1.0", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,8 +50,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory store for "today's" patients (reset per demo/session)
-patients_store: list[dict] = []
+# Auth Endpoints
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "patient"
+
+@app.post("/api/auth/register")
+async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).filter(User.username == data.username))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    new_user = User(
+        username=data.username,
+        hashed_password=get_password_hash(data.password),
+        role=data.role
+    )
+    db.add(new_user)
+    await db.commit()
+    return {"message": "User created successfully"}
+
+@app.post("/api/auth/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).filter(User.username == form_data.username))
+    user = result.scalars().first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer", "role": user.role, "username": user.username}
+
+# BASE WAIT MINUTES
 
 BASE_WAIT_MINUTES = 15
 
@@ -57,7 +103,11 @@ def _update_estimated_waits(store: list[dict]) -> None:
 
 
 @app.post("/api/patients", response_model=PatientResponse)
-def add_patient(data: PatientCreate):
+async def add_patient(
+    data: PatientCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """Add patient: validate, predict risk, recommend department, build explainability."""
     alerts = get_abnormality_alerts(
         heart_rate=data.heart_rate,
@@ -91,10 +141,17 @@ def add_patient(data: PatientCreate):
     prob_breakdown = pred["probability_breakdown"]
     confidence = pred["confidence_score"]
     preferred_dept, reasoning = recommend_department(risk_level, data.symptoms)
-    routed_dept, routing_message = route_with_load_balancing(preferred_dept, risk_level, patients_store)
+    
+    # Load balancing (requires list of patients - fetch from DB for "today")
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(select(PatientRecord).filter(PatientRecord.created_at >= today_start))
+    today_patients = [p.__dict__ for p in result.scalars().all()]
+    
+    routed_dept, routing_message = route_with_load_balancing(preferred_dept, risk_level, today_patients)
     dept = routed_dept
     if routing_message:
         reasoning = reasoning + " " + routing_message
+        
     priority = risk_to_priority_score(risk_level, confidence)
     explain = get_explainability(
         age=data.age,
@@ -119,6 +176,32 @@ def add_patient(data: PatientCreate):
         temperature=data.temperature,
         blood_pressure_systolic=data.blood_pressure_systolic,
     )
+    
+    patient_id = _generate_patient_id()
+    
+    new_record = PatientRecord(
+        patient_id=patient_id,
+        age=data.age,
+        gender=data.gender.value,
+        heart_rate=data.heart_rate,
+        blood_pressure_systolic=data.blood_pressure_systolic,
+        blood_pressure_diastolic=data.blood_pressure_diastolic,
+        temperature=data.temperature,
+        spo2=data.spo2,
+        respiratory_rate=data.respiratory_rate,
+        pain_score=data.pain_score,
+        chronic_disease_count=data.chronic_disease_count,
+        symptom_duration=data.symptom_duration,
+        risk_level=risk_level,
+        priority_score=priority,
+        recommended_department=dept,
+        user_id=current_user.id if current_user else None
+    )
+    db.add(new_record)
+    await db.commit()
+    await db.refresh(new_record)
+    
+    # Prepare response
     prob_model = ProbabilityBreakdown(
         low=prob_breakdown.get("low", 0),
         medium=prob_breakdown.get("medium", 0),
@@ -132,8 +215,8 @@ def add_patient(data: PatientCreate):
         feature_importance=explain.get("feature_importance"),
     )
     patient_id = _generate_patient_id()
-    created_at = datetime.utcnow().isoformat() + "Z"
-
+    created_at = new_record.created_at.isoformat() + "Z"
+ 
     record = {
         "patient_id": patient_id,
         "age": data.age,
@@ -163,40 +246,44 @@ def add_patient(data: PatientCreate):
         "explainability": explainability.model_dump(),
         "created_at": created_at,
     }
-    patients_store.append(record)
-    _update_estimated_waits(patients_store)
     return PatientResponse(**record)
 
 
 @app.get("/api/patients")
-def list_patients(sort: str | None = "priority"):
-    """List all patients (today's triage). sort=priority (default) | created. Includes estimated_wait_minutes."""
-    _update_estimated_waits(patients_store)
+async def list_patients(sort: str | None = "priority", db: AsyncSession = Depends(get_db)):
+    """List all patients from DB."""
+    result = await db.execute(select(PatientRecord))
+    patients = [p.__dict__ for p in result.scalars().all()]
+    _update_estimated_waits(patients)
     if sort == "priority":
-        ordered = sorted(patients_store, key=lambda p: (-p.get("priority_score", 0), p.get("created_at", "")))
+        ordered = sorted(patients, key=lambda p: (-p.get("priority_score", 0), p.get("created_at", "")))
     else:
-        ordered = list(patients_store)
-    return {"patients": ordered, "total": len(patients_store)}
+        ordered = list(patients)
+    return {"patients": ordered, "total": len(patients)}
 
 
 @app.get("/api/departments/status")
-def departments_status():
-    """Department load: max capacity, current patients, load %, overloaded flag."""
-    return {"departments": get_department_status(patients_store)}
+async def departments_status(db: AsyncSession = Depends(get_db)):
+    """Department load from DB records."""
+    result = await db.execute(select(PatientRecord))
+    patients = [p.__dict__ for p in result.scalars().all()]
+    return {"departments": get_department_status(patients)}
 
 
 @app.get("/api/dashboard")
-def dashboard():
-    """Overview: total today, high/medium/low counts, risk and department distribution."""
-    high = sum(1 for p in patients_store if p.get("risk_level") == "high")
-    medium = sum(1 for p in patients_store if p.get("risk_level") == "medium")
-    low = sum(1 for p in patients_store if p.get("risk_level") == "low")
+async def dashboard(db: AsyncSession = Depends(get_db)):
+    """Overview from DB."""
+    result = await db.execute(select(PatientRecord))
+    patients = [p.__dict__ for p in result.scalars().all()]
+    high = sum(1 for p in patients if p.get("risk_level") == "high")
+    medium = sum(1 for p in patients if p.get("risk_level") == "medium")
+    low = sum(1 for p in patients if p.get("risk_level") == "low")
     dept_counts: dict[str, int] = {}
-    for p in patients_store:
+    for p in patients:
         d = p.get("recommended_department", "General Medicine")
         dept_counts[d] = dept_counts.get(d, 0) + 1
     return {
-        "total_patients_today": len(patients_store),
+        "total_patients_today": len(patients),
         "high_risk_count": high,
         "medium_risk_count": medium,
         "low_risk_count": low,
@@ -224,14 +311,14 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    """Triage support bot: guided symptoms, risk explanation, medical terms."""
+async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """Triage support bot with DB lookup."""
     last_patient = None
     if req.last_patient_id:
-        for p in patients_store:
-            if p.get("patient_id") == req.last_patient_id:
-                last_patient = p
-                break
+        result = await db.execute(select(PatientRecord).filter(PatientRecord.patient_id == req.last_patient_id))
+        last_patient_obj = result.scalars().first()
+        if last_patient_obj:
+            last_patient = last_patient_obj.__dict__
     reply, state = chat_turn(req.message, req.chat_state, last_patient)
     return ChatResponse(
         reply=reply,
@@ -254,8 +341,12 @@ class SimulationAddRequest(BaseModel):
 
 
 @app.post("/api/simulation/add")
-def simulation_add(req: SimulationAddRequest | None = None):
-    """Add simulated patient(s). count=1 by default; emergency_spike=True adds high-risk biased patients."""
+async def simulation_add(
+    req: SimulationAddRequest | None = None, 
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Add simulated patient(s) to DB with Admin protection."""
     if req is None:
         req = SimulationAddRequest()
     added: list[PatientResponse] = []
@@ -266,37 +357,43 @@ def simulation_add(req: SimulationAddRequest | None = None):
         except ValueError:
             payload["gender"] = Gender.OTHER
         patient_data = PatientCreate(**payload)
-        res = add_patient(patient_data)
+        res = await add_patient(patient_data, db=db, current_user=current_admin)
         added.append(res)
     return {"added": len(added), "patients": [r.model_dump() for r in added]}
 
 
 @app.post("/api/simulation/spike")
-def simulation_spike():
+async def simulation_spike(db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin)):
     """Add 5 high-risk simulated patients (emergency spike demo)."""
-    return simulation_add(SimulationAddRequest(count=5, emergency_spike=True))
+    return await simulation_add(SimulationAddRequest(count=5, emergency_spike=True), db=db, current_admin=current_admin)
 
 
 @app.get("/api/fairness")
-def fairness():
-    """Bias & fairness: gender/age vs risk, heatmap data, imbalance alert."""
-    return compute_fairness_metrics(patients_store)
+async def fairness(db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin)):
+    """Bias & fairness with Admin protection."""
+    result = await db.execute(select(PatientRecord))
+    patients = [p.__dict__ for p in result.scalars().all()]
+    return compute_fairness_metrics(patients)
 
 
 # ----- Admin & Model -----
 
 @app.get("/api/admin/patients")
-def admin_list_patients(
+async def admin_list_patients(
     risk: str | None = Query(None, description="Filter by risk: low, medium, high"),
     limit: int = Query(500, le=2000),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
 ):
-    """Patient logs with optional risk filter."""
-    out = list(patients_store)
+    """Patient logs from DB with Admin protection."""
+    query = select(PatientRecord)
     if risk:
-        out = [p for p in out if p.get("risk_level") == risk]
-    out = out[:limit]
-    _update_estimated_waits(patients_store)
-    return {"patients": out, "total": len(out)}
+        query = query.filter(PatientRecord.risk_level == risk)
+    query = query.limit(limit)
+    result = await db.execute(query)
+    patients = [p.__dict__ for p in result.scalars().all()]
+    _update_estimated_waits(patients)
+    return {"patients": patients, "total": len(patients)}
 
 
 _EXPORT_COLUMNS = [
@@ -309,17 +406,29 @@ _EXPORT_COLUMNS = [
 
 
 @app.get("/api/admin/export")
-def admin_export_patients(risk: str | None = Query(None)):
-    """Download prediction history as CSV."""
-    out = list(patients_store)
+async def admin_export_patients(
+    risk: str | None = Query(None), 
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Download prediction history as CSV from DB with Admin protection."""
+    query = select(PatientRecord)
     if risk:
-        out = [p for p in out if p.get("risk_level") == risk]
+        query = query.filter(PatientRecord.risk_level == risk)
+    result = await db.execute(query)
+    out = [p.__dict__ for p in result.scalars().all()]
+    
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=_EXPORT_COLUMNS, extrasaction="ignore")
     writer.writeheader()
     for p in out:
         row = {k: p.get(k) for k in _EXPORT_COLUMNS if isinstance(p.get(k), (str, int, float, type(None)))}
-        row["symptoms"] = ",".join(p.get("symptoms", []))
+        # Fix symptoms if it's stored as list or string
+        syms = p.get("symptoms", [])
+        if isinstance(syms, str):
+            row["symptoms"] = syms
+        else:
+            row["symptoms"] = ",".join(syms)
         writer.writerow(row)
     buf.seek(0)
     return StreamingResponse(
@@ -330,8 +439,11 @@ def admin_export_patients(risk: str | None = Query(None)):
 
 
 @app.post("/api/admin/synthetic/regenerate")
-def admin_regenerate_synthetic(n_samples: int = Query(2500, ge=500, le=10000)):
-    """Regenerate synthetic dataset and retrain model."""
+def admin_regenerate_synthetic(
+    n_samples: int = Query(2500, ge=500, le=10000),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Regenerate synthetic dataset and retrain model with Admin protection."""
     try:
         from ml.train_model import train
         _, _, summary = train(n_samples=n_samples)
@@ -341,8 +453,8 @@ def admin_regenerate_synthetic(n_samples: int = Query(2500, ge=500, le=10000)):
 
 
 @app.get("/api/admin/synthetic/summary")
-def admin_synthetic_summary():
-    """Last synthetic dataset / model summary from meta.json."""
+def admin_synthetic_summary(current_admin: User = Depends(get_current_admin)):
+    """Last synthetic dataset / model summary from meta.json with Admin protection."""
     import json
     from pathlib import Path
     meta_path = Path(__file__).resolve().parent.parent / "ml" / "artifacts" / "meta.json"
@@ -362,8 +474,8 @@ def admin_synthetic_summary():
 
 
 @app.get("/api/admin/model")
-def admin_model_info():
-    """Model version, accuracy, metadata."""
+def admin_model_info(current_admin: User = Depends(get_current_admin)):
+    """Model version, accuracy, metadata with Admin protection."""
     import json
     from pathlib import Path
     meta_path = Path(__file__).resolve().parent.parent / "ml" / "artifacts" / "meta.json"
@@ -380,8 +492,11 @@ def admin_model_info():
 
 
 @app.post("/api/admin/model/retrain")
-def admin_model_retrain(n_samples: int = Query(2500, ge=500, le=10000)):
-    """Retrain model (regenerate synthetic data + train)."""
+def admin_model_retrain(
+    n_samples: int = Query(2500, ge=500, le=10000),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Retrain model (regenerate synthetic data + train) with Admin protection."""
     try:
         from ml.train_model import train
         _, _, summary = train(n_samples=n_samples)

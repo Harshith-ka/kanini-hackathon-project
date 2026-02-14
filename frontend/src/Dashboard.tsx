@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   const refresh = () => {
     getDashboard().then(setData).catch(() => setError('Failed to load dashboard'))
-    getPatients().then((r) => setPatients(r.patients)).catch(() => {})
+    getPatients().then((r) => setPatients(r.patients)).catch(() => { })
     getDepartmentStatus().then((r) => setDepartments(r.departments)).catch(() => setDepartments([]))
   }
 
@@ -189,6 +189,12 @@ export default function Dashboard() {
                 <span style={{ minWidth: 120 }}>{p.patient_id}</span>
                 <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12, background: p.risk_level === 'high' ? 'var(--red)' : p.risk_level === 'medium' ? 'var(--yellow)' : 'var(--green)', color: '#fff' }}>{p.risk_level}</span>
                 <span style={{ color: 'var(--text-muted)' }}>{p.recommended_department}</span>
+                <span style={{ marginLeft: 12, fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
+                  <span>Resp: {p.respiratory_rate}</span>
+                  <span>Pain: {p.pain_score}</span>
+                  <span>Chronic: {p.chronic_disease_count}</span>
+                  <span>Dur: {p.symptom_duration}h</span>
+                </span>
                 {p.estimated_wait_minutes != null && (
                   <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>~{p.estimated_wait_minutes} min wait</span>
                 )}

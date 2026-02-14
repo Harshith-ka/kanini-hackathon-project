@@ -122,8 +122,12 @@ export default function Admin() {
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th style={{ textAlign: 'left', padding: 8 }}>ID</th>
               <th style={{ textAlign: 'left', padding: 8 }}>Risk</th>
-              <th style={{ textAlign: 'left', padding: 8 }}>Priority</th>
-              <th style={{ textAlign: 'left', padding: 8 }}>Department</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Pri</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Dept</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Resp</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Pain</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Chronic</th>
+              <th style={{ textAlign: 'left', padding: 8 }}>Dur(h)</th>
               <th style={{ textAlign: 'left', padding: 8 }}>Created</th>
             </tr>
           </thead>
@@ -134,6 +138,10 @@ export default function Admin() {
                 <td style={{ padding: 8 }}>{p.risk_level}</td>
                 <td style={{ padding: 8 }}>{p.priority_score}</td>
                 <td style={{ padding: 8 }}>{p.recommended_department}</td>
+                <td style={{ padding: 8 }}>{p.respiratory_rate}</td>
+                <td style={{ padding: 8 }}>{p.pain_score}</td>
+                <td style={{ padding: 8 }}>{p.chronic_disease_count}</td>
+                <td style={{ padding: 8 }}>{p.symptom_duration}</td>
                 <td style={{ padding: 8 }}>{p.created_at?.slice(0, 19)}</td>
               </tr>
             ))}
