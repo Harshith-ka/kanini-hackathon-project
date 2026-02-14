@@ -1,0 +1,32 @@
+{
+  "feature_names": [
+    "age",
+    "gender_enc",
+    "heart_rate",
+    "blood_pressure_systolic",
+    "blood_pressure_diastolic",
+    "temperature",
+    "spo2",
+    "symptom_chest_pain",
+    "symptom_shortness_of_breath",
+    "symptom_headache",
+    "symptom_fever",
+    "symptom_dizziness",
+    "symptom_nausea",
+    "symptom_abdominal_pain",
+    "symptom_bleeding",
+    "symptom_unconscious",
+    "symptom_seizure",
+    "symptom_trauma",
+    "symptom_burn",
+    "symptom_allergic_reaction",
+    "symptom_stroke_symptoms",
+    "symptom_other"
+  ],
+  "classes": [
+    "high",
+    "low",
+    "medium"
+  ],
+  "test_accuracy": 0.732
+}
