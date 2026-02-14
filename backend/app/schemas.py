@@ -88,6 +88,8 @@ class Explainability(BaseModel):
     department_reasoning: str
     shap_contributions: list[dict] | None = None  # [{"name": str, "contribution": float}] positive=increases risk
     feature_importance: list[dict] | None = None  # [{"name": str, "importance": float}] global
+    contributing_risk_factors: list[str] = Field(default_factory=list)
+    disease_insights: list[str] = Field(default_factory=list)
 
 
 class DepartmentRecommendation(BaseModel):
@@ -128,3 +130,35 @@ class PatientResponse(BaseModel):
     routing_message: str | None = None   # e.g. "Emergency overloaded; routed to Cardiology"
     severity_timeline: str | None = None # e.g. "Risk may escalate in 2 hours"
     estimated_wait_minutes: int | None = None
+    is_active: bool = True
+
+
+class PatientRegister(BaseModel):
+    full_name: str
+    email: str
+    age: int
+    gender: Gender
+    phone: Optional[str] = None
+
+
+class RegistrationResponse(BaseModel):
+    username: str
+    temporary_password: str
+    patient_id: str
+
+
+class PatientUpdate(BaseModel):
+    age: Optional[int] = None
+    gender: Optional[Gender] = None
+    symptoms: Optional[list[str]] = None
+    heart_rate: Optional[int] = None
+    blood_pressure_systolic: Optional[int] = None
+    blood_pressure_diastolic: Optional[int] = None
+    temperature: Optional[float] = None
+    spo2: Optional[int] = None
+    chronic_disease_count: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    pain_score: Optional[int] = None
+    symptom_duration: Optional[int] = None
+    pre_existing_conditions: Optional[list[str]] = None
+    recommended_department: Optional[str] = None

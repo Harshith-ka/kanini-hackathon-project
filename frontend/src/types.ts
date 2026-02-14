@@ -32,6 +32,7 @@ export interface ChatState {
   mode?: string
   step?: number
   collected_symptoms?: string[]
+  [key: string]: unknown
 }
 
 export interface ChatResponse {

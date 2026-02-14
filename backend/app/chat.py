@@ -35,24 +35,26 @@ for code in SYMPTOM_OPTIONS:
 
 # Medical term explanations (non-diagnostic, general info)
 MEDICAL_TERMS = {
-    "spo2": "SpO2 is blood oxygen saturation (%). Normal is 95–100%. Lower values may need medical attention.",
-    "blood pressure": "Blood pressure has two numbers: systolic (when heart beats) and diastolic (when heart rests). Normal is around 120/80 mmHg.",
-    "heart rate": "Heart rate is beats per minute (bpm). Normal resting is about 60–100 bpm.",
-    "triage": "Triage means sorting patients by urgency so the most critical get care first.",
-    "risk level": "Our system classifies risk as Low, Medium, or High based on vitals and symptoms—not a diagnosis.",
-    "systolic": "Systolic pressure is the top number, when the heart contracts.",
-    "diastolic": "Diastolic pressure is the bottom number, when the heart relaxes.",
+    "spo2": "SpO2 is blood oxygen saturation (%). Normal is 95–100%. Lower values (hypoxia) may indicate breathing or circulation issues.",
+    "blood pressure": "Blood pressure has two numbers: systolic (when heart beats) and diastolic (when heart rests). Normal is around 120/80 mmHg. High BP (hypertension) can increase cardiovascular risk.",
+    "heart rate": "Heart rate (pulse) is beats per minute. Normal resting is about 60–100 bpm. Elevated pulse (tachycardia) can be due to pain, fever, or stress.",
+    "triage": "Triage means sorting patients by clinical urgency. Critical cases (High Risk) are seen immediately.",
+    "risk level": "Our system classifies risk as Low, Medium, or High based on vitals and symptoms. This is a sorting tool, not a clinical diagnosis.",
+    "systolic": "The top BP number, representing pressure during heart contraction.",
+    "diastolic": "The bottom BP number, representing pressure when the heart is between beats.",
+    "hypertension": "Consistently high blood pressure (e.g. above 140/90). It's a major risk factor for heart disease and stroke.",
+    "shock index": "Shock Index is Heart Rate divided by Systolic BP. A value > 0.9 may indicate early circulatory distress even if vitals look stable.",
 }
 
-DISCLAIMER = "This is general information only, not medical advice. Always follow your healthcare provider's guidance."
+DISCLAIMER = "Note: This is an AI-generated explanation for educational purposes. It is NOT a medical diagnosis. Always follow your provider's instructions."
 
-# Guided flow: questions to collect symptoms
+# Guided flow questions
 GUIDED_QUESTIONS = [
-    "What brings you in today? Please list any symptoms (e.g. chest pain, fever, headache).",
-    "Are you having any breathing problems, dizziness, or nausea?",
-    "Any pain (chest, abdomen, head)? Any bleeding, burns, or trauma?",
-    "Have you had seizures, loss of consciousness, or stroke-like symptoms (face drooping, slurred speech, weakness on one side)?",
-    "Anything else we should know? Type 'done' when finished.",
+    "I'll help you prepare for triage. First, what are your primary symptoms? (e.g. chest pain, fever, shortness of breath)",
+    "Are you experiencing any dizziness, nausea, or localized pain in your abdomen or limbs?",
+    "Any history of chronic diseases like diabetes or hypertension? Also, how long have you had these symptoms?",
+    "Lastly, any severe warning signs like fainting, seizures, or sudden weakness?",
+    "Got it. Type 'done' to finish or add more details. I'll summarize everything for the clinical team."
 ]
 
 
@@ -67,60 +69,76 @@ def extract_symptoms_from_text(text: str) -> list[str]:
 
 
 def get_guided_reply(step: int, user_message: str, collected_symptoms: list[str]) -> tuple[str, int, list[str]]:
-    """
-    Guided symptom collection. Returns (bot_reply, next_step, updated_symptoms).
-    step 0..len(GUIDED_QUESTIONS)-1; when step reaches end, return summary.
-    """
+    """Guided symptom collection flow."""
     msg = user_message.strip().lower()
-    if msg in ("done", "finish", "that's all", "nothing else"):
+    if msg in ("done", "finish", "that's all", "nothing else", "no"):
         if not collected_symptoms:
-            return "Please mention at least one symptom (e.g. headache, fever) so we can help. What are you experiencing?", step, collected_symptoms
-        return f"I've noted: {', '.join(SYMPTOM_LABELS.get(s, s) for s in collected_symptoms)}. You can now submit these on the Add Patient form, or say 'explain risk' after a triage.", len(GUIDED_QUESTIONS), collected_symptoms
+            return "Please mention at least one symptom (like fever or pain) so I can help. What brings you in?", step, collected_symptoms
+        return f"Assessment complete. I've noted: {', '.join(SYMPTOM_LABELS.get(s, s) for s in collected_symptoms)}. You can now submit this to the intake form.", len(GUIDED_QUESTIONS), collected_symptoms
 
     new_symptoms = extract_symptoms_from_text(user_message)
     updated = list(set(collected_symptoms) | set(new_symptoms))
 
-    if step >= len(GUIDED_QUESTIONS) - 1:
-        reply = f"I've noted: {', '.join(SYMPTOM_LABELS.get(s, s) for s in updated)}. Say 'done' to finish or add more symptoms."
-        return reply, len(GUIDED_QUESTIONS), updated
+    if step >= len(GUIDED_QUESTIONS):
+        return f"Noted. Currently tracked: {', '.join(SYMPTOM_LABELS.get(s, s) for s in updated)}. Say 'done' to finish.", len(GUIDED_QUESTIONS), updated
 
     reply = GUIDED_QUESTIONS[step]
-    if updated:
-        reply = f"Got it: {', '.join(SYMPTOM_LABELS.get(s, s) for s in updated)}. Next: {reply}"
+    if updated and step == 0:
+        reply = f"I've noted those symptoms. Next: {GUIDED_QUESTIONS[1]}"
+        return reply, 2, updated
+        
     return reply, step + 1, updated
 
 
 def get_risk_explanation_reply(last_patient: dict | None) -> str:
-    """Answer 'why am I high risk?', 'why emergency?', 'what increased my risk?' from last patient."""
+    """Mode 2 - Explain risk using SHAP and vitals."""
     if not last_patient:
-        return "No triage result in this session yet. Add a patient using the form to get a risk assessment, then you can ask 'Why am I high risk?' or 'Why Emergency?' and I'll explain."
-    risk = last_patient.get("risk_level", "")
+        return "I don't see a triage result for you yet. Once the admin runs an AI analysis, I can explain the risk factors."
+        
+    risk = last_patient.get("risk_level", "").upper()
     dept = last_patient.get("recommended_department", "")
-    reasoning = last_patient.get("reasoning_summary", "")
     explain = last_patient.get("explainability") or {}
-    top = explain.get("top_contributing_features", [])
-    probs = last_patient.get("probability_breakdown", {})
     abnormal = explain.get("abnormal_vitals", [])
+    top_features = explain.get("top_contributing_features", [])
+    insights = explain.get("disease_insights", [])
+    
+    parts = [f"### Triage Analysis: {risk}\n"]
+    
+    if risk == "HIGH":
+        parts.append("🛑 **Priority Alert:** Your clinical indicators suggest urgent attention is needed.")
+    elif risk == "MEDIUM":
+        parts.append("⚠️ **Observation Needed:** You have markers that require medical evaluation.")
+    else:
+        parts.append("✅ **Stable:** Your indicators currently suggest a low urgency level.")
 
-    parts = [
-        f"**Risk level:** {risk}. **Department:** {dept}.",
-        reasoning,
-    ]
-    if probs:
-        parts.append(f"Model probabilities: Low {probs.get('low', 0):.0%}, Medium {probs.get('medium', 0):.0%}, High {probs.get('high', 0):.0%}.")
-    if top:
-        parts.append("Factors that influenced risk: " + "; ".join(f"{t.get('name', '')} ({t.get('impact', '')})" for t in top[:3]))
+    parts.append(f"\n**Assigned Department:** {dept}")
+    
     if abnormal:
-        parts.append("Abnormal vitals noted: " + ", ".join(f"{v.get('name')} (normal: {v.get('normal_range')})" for v in abnormal))
-    return " ".join(parts)
+        parts.append("\n**Key Vitals Contributing to Risk:**")
+        for v in abnormal:
+            parts.append(f"- {v.get('name')}: {v.get('value')} (Target range: {v.get('normal_range')})")
+            
+    if insights:
+         parts.append("\n**Disease Context:**")
+         for insight in insights:
+             parts.append(f"- {insight}")
+
+    if top_features:
+        parts.append("\n**AI Model Insights:**")
+        for f in top_features[:3]:
+            impact = f.get('impact', '').lower()
+            parts.append(f"- {f.get('name')}: High contribution to {risk} risk classification.")
+
+    parts.append(f"\n_{DISCLAIMER}_")
+    return "\n".join(parts)
 
 
 def get_medical_term_reply(user_message: str) -> str | None:
-    """If user asks about a medical term, return explanation + disclaimer."""
+    """Mode 3 - Education/Explanation."""
     msg = user_message.lower().strip()
     for term, explanation in MEDICAL_TERMS.items():
-        if term in msg and ("what is" in msg or "meaning" in msg or "explain" in msg or "?" in msg):
-            return f"{explanation} {DISCLAIMER}"
+        if term in msg:
+            return f"**{term.upper()} Explanation:** {explanation}\n\n_{DISCLAIMER}_"
     return None
 
 
@@ -129,28 +147,26 @@ def chat_turn(
     chat_state: dict[str, Any],
     last_patient: dict | None,
 ) -> tuple[str, dict[str, Any]]:
-    """
-    Process one user message. chat_state: { mode, step, collected_symptoms }.
-    Returns (bot_reply, updated_state).
-    """
+    """Main chat router."""
     msg = user_message.strip().lower()
-    mode = chat_state.get("mode", "guided")  # guided | risk_explanation | medical
+    mode = chat_state.get("mode", "guided")
     step = chat_state.get("step", 0)
     collected = list(chat_state.get("collected_symptoms", []))
 
-    # Mode switches
-    if "explain risk" in msg or "why am i high risk" in msg or "why emergency" in msg or "what increased my risk" in msg or "why this department" in msg:
-        reply = get_risk_explanation_reply(last_patient)
-        return reply, {"mode": "risk_explanation", "step": step, "collected_symptoms": collected}
+    # Explicit Mode Triggers
+    if any(k in msg for k in ["why", "explain", "risk", "reason", "increased"]):
+        if last_patient:
+            reply = get_risk_explanation_reply(last_patient)
+            return reply, {"mode": "risk_explanation", "step": step, "collected_symptoms": collected}
+            
+    # Check for medical terms
+    term_reply = get_medical_term_reply(user_message)
+    if term_reply:
+        return term_reply, {"mode": "medical", "step": step, "collected_symptoms": collected}
 
-    if "medical" in msg or "what is " in msg or "meaning of" in msg:
-        term_reply = get_medical_term_reply(user_message)
-        if term_reply:
-            return term_reply, {"mode": "medical", "step": step, "collected_symptoms": collected}
+    if "start over" in msg or "reset" in msg:
+        return GUIDED_QUESTIONS[0], {"mode": "guided", "step": 1, "collected_symptoms": []}
 
-    if "start over" in msg or "new symptoms" in msg:
-        return "Starting over. " + GUIDED_QUESTIONS[0], {"mode": "guided", "step": 1, "collected_symptoms": []}
-
-    # Guided symptom collection
+    # Default to Guided Intake
     reply, next_step, updated_symptoms = get_guided_reply(step, user_message, collected)
     return reply, {"mode": "guided", "step": next_step, "collected_symptoms": updated_symptoms}

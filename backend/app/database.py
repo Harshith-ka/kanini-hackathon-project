@@ -17,7 +17,10 @@ class User(Base):
     __tablename__ = "users"
     
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    username: Mapped[str] = mapped_column(unique=True, index=True)
+    username: Mapped[str] = mapped_column(unique=True, index=True) # This will be the email for patients
+    full_name: Mapped[str] = mapped_column(default="")
+    email: Mapped[str] = mapped_column(unique=True, index=True)
+    phone: Mapped[Optional[str]] = mapped_column()
     hashed_password: Mapped[str] = mapped_column()
     role: Mapped[str] = mapped_column(default="patient") # "admin" or "patient"
     created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
@@ -41,6 +44,7 @@ class PatientRecord(Base):
     risk_level: Mapped[str] = mapped_column()
     priority_score: Mapped[float] = mapped_column()
     recommended_department: Mapped[str] = mapped_column()
+    is_active: Mapped[bool] = mapped_column(default=True) # False if discharged
     created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
     user_id: Mapped[Optional[int]] = mapped_column(index=True)
 

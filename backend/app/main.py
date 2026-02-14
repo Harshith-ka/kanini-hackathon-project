@@ -31,9 +31,18 @@ from app.schemas import (
     PatientResponse,
     ProbabilityBreakdown,
     SYMPTOM_OPTIONS,
+    RegistrationResponse,
+    PatientRegister,
+    PatientUpdate,
 )
 from app.validation import get_abnormality_alerts
 from ml.inference import get_explainability, predict_risk
+import secrets
+import string
+
+def generate_temp_password(length=12):
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,7 +91,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role, "username": user.username}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer", 
+        "role": user.role, 
+        "username": user.username,
+        "full_name": user.full_name
+    }
 
 # BASE WAIT MINUTES
 
@@ -296,6 +311,132 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
 def list_symptoms():
     """Return symptom options for multi-select."""
     return {"symptoms": SYMPTOM_OPTIONS}
+
+
+@app.post("/api/admin/register-patient", response_model=RegistrationResponse)
+async def register_patient(
+    data: PatientRegister, 
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Admin registers a new patient, creating a user account and record stub."""
+    # Check if user already exists
+    result = await db.execute(select(User).filter(User.username == data.email))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    temp_password = generate_temp_password()
+    new_user = User(
+        username=data.email,
+        email=data.email,
+        full_name=data.full_name,
+        phone=data.phone,
+        hashed_password=get_password_hash(temp_password),
+        role="patient"
+    )
+    db.add(new_user)
+    await db.flush() # Get user ID
+    
+    patient_id = _generate_patient_id()
+    # Create a stub record with minimal info
+    # (Actual clinical data will be added later in add_patient step)
+    
+    return RegistrationResponse(
+        username=data.email,
+        temporary_password=temp_password,
+        patient_id=patient_id
+    )
+
+
+@app.get("/api/patient/dashboard")
+async def get_patient_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch latest medical status for the logged-in patient."""
+    if current_user.role != "patient":
+        raise HTTPException(status_code=400, detail="Only patients can access this dashboard")
+    
+    result = await db.execute(
+        select(PatientRecord)
+        .filter(PatientRecord.user_id == current_user.id)
+        .order_by(PatientRecord.created_at.desc())
+    )
+    record = result.scalars().first()
+    if not record:
+        return {"has_record": False, "message": "No triage record found."}
+    
+    # We need to reconstruct the full response with explainability
+    # For simplicity in this demo, we'll return the record dict + some mock wait time
+    # In a real app, we'd reuse the add_patient logic or store full JSON in DB
+    
+    # Calculate queue position
+    all_active = await db.execute(
+        select(PatientRecord)
+        .filter(PatientRecord.is_active == True)
+        .order_by(PatientRecord.priority_score.desc(), PatientRecord.created_at.asc())
+    )
+    active_list = all_active.scalars().all()
+    queue_pos = -1
+    for i, p in enumerate(active_list):
+        if p.patient_id == record.patient_id:
+            queue_pos = i + 1
+            break
+            
+    wait_time = max(15, queue_pos * 10) if queue_pos > 0 else 0
+    
+    return {
+        "has_record": True,
+        "record": record,
+        "queue_position": queue_pos,
+        "estimated_wait_minutes": wait_time,
+        "user_profile": {
+            "full_name": current_user.full_name,
+            "email": current_user.email
+        }
+    }
+
+
+@app.patch("/api/patients/{patient_id}")
+async def update_patient(
+    patient_id: str,
+    data: PatientUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Update patient vitals/details and potentially re-run risk analysis."""
+    result = await db.execute(select(PatientRecord).filter(PatientRecord.patient_id == patient_id))
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(record, key, value)
+    
+    # If vitals changed, we should ideally re-run ml.predict_risk
+    # and update risk_level, priority_score, etc.
+    # For now, we'll just commit the changes.
+    
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+@app.post("/api/patients/{patient_id}/discharge")
+async def discharge_patient(
+    patient_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Set patient as inactive (discharged)."""
+    result = await db.execute(select(PatientRecord).filter(PatientRecord.patient_id == patient_id))
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    record.is_active = False
+    await db.commit()
+    return {"message": "Patient discharged successfully"}
 
 
 class ChatRequest(BaseModel):

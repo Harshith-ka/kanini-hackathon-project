@@ -10,7 +10,7 @@ function getHeaders(contentType: string | null = 'application/json') {
   return headers
 }
 
-export async function login(username: string, password: string): Promise<{ access_token: string; role: string; username: string }> {
+export async function login(username: string, password: string): Promise<{ access_token: string; role: string; username: string; full_name?: string }> {
   const formData = new URLSearchParams()
   formData.append('username', username)
   formData.append('password', password)
@@ -24,6 +24,7 @@ export async function login(username: string, password: string): Promise<{ acces
   localStorage.setItem('triage_token', data.access_token)
   localStorage.setItem('triage_role', data.role)
   localStorage.setItem('triage_username', data.username)
+  if (data.full_name) localStorage.setItem('triage_fullname', data.full_name)
   return data
 }
 
@@ -181,5 +182,41 @@ export async function retrainModel(nSamples = 2500): Promise<{ ok: boolean; summ
     headers: getHeaders()
   })
   if (!r.ok) throw new Error('Retrain failed')
+  return r.json()
+}
+
+// New Endpoints
+export async function registerPatient(data: { full_name: string; email: string; age: number; gender: string; phone?: string }) {
+  const r = await fetch(`${BASE}/api/admin/register-patient`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(data)
+  })
+  if (!r.ok) throw new Error('Registration failed')
+  return r.json()
+}
+
+export async function getPatientDashboard() {
+  const r = await fetch(`${BASE}/api/patient/dashboard`, { headers: getHeaders() })
+  if (!r.ok) throw new Error('Failed to fetch patient dashboard')
+  return r.json()
+}
+
+export async function updatePatient(patient_id: string, data: any) {
+  const r = await fetch(`${BASE}/api/patients/${patient_id}`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify(data)
+  })
+  if (!r.ok) throw new Error('Update failed')
+  return r.json()
+}
+
+export async function dischargePatient(patient_id: string) {
+  const r = await fetch(`${BASE}/api/patients/${patient_id}/discharge`, {
+    method: 'POST',
+    headers: getHeaders()
+  })
+  if (!r.ok) throw new Error('Discharge failed')
   return r.json()
 }
