@@ -1,8 +1,11 @@
-
 import os
 import json
+from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
+
+# Ensure environment variables are loaded
+load_dotenv()
 
 # Initialize OpenAI client
 api_key = os.getenv("OPENAI_API_KEY")
@@ -55,17 +58,28 @@ async def explain_risk_assessment(context: Dict[str, Any], language: str = "en")
         """
 
         response = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini", # Upgrade to 4o-mini if available for better JSON/reasoning
             messages=[
                 {"role": "system", "content": SAFETY_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
+            temperature=0.3, # Lower temperature for better structure
             response_format={"type": "json_object"}
         )
 
         content = response.choices[0].message.content
-        return json.loads(content)
+        data = json.loads(content)
+        
+        # Post-process to ensure list of dicts for top_contributing_features
+        if "top_contributing_features" in data and isinstance(data["top_contributing_features"], list):
+            valid_stats = []
+            for item in data["top_contributing_features"]:
+                if isinstance(item, dict) and "name" in item:
+                    valid_stats.append(item)
+            data["top_contributing_features"] = valid_stats
+            
+        return data
+
 
     except Exception as e:
         print(f"OpenAI Error: {e}")
@@ -91,7 +105,7 @@ async def medical_chat(history: List[Dict[str, str]], language: str = "en") -> s
         messages = [{"role": "system", "content": system_msg}] + history[-5:]
 
         response = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.7
         )

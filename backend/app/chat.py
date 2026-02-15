@@ -188,24 +188,25 @@ async def chat_turn(
             reply = get_risk_explanation_reply(last_patient)
             return reply, {"mode": "risk_explanation", "step": step, "collected_symptoms": collected}
             
-    # Check for medical terms - Use LLM if key exists, else fallback
-    import os
-    if os.getenv("OPENAI_API_KEY") and len(msg.split()) > 2:
-        # If message is long enough to be a question and we have LLM
-        # But exclude simple "done" or symptom listing if we are in guided mode...
-        # Actually, let's keep guided mode strictly for symptoms unless explicitly asked
-        pass 
-
-    # Default to Guided Intake
+    # Run guided flow in background to see if we found symptoms
     reply, next_step, updated_symptoms = get_guided_reply(step, user_message, collected)
     
-    # If guided flow didn't progress (user said something else) OR finished
-    if next_step == step and not updated_symptoms:
-         # Try LLM for general medical Q&A
-         import os
-         from app.llm import medical_chat
-         if os.getenv("OPENAI_API_KEY"):
-             llm_reply = await medical_chat([{"role": "user", "content": user_message}])
-             return llm_reply, {"mode": "medical_qa", "step": step, "collected_symptoms": collected}
+    # If the user message didn't result in new symptoms and isn't "done", 
+    # and it's long enough to be a question, try LLM for general context.
+    import os
+    from app.llm import medical_chat
+    if os.getenv("OPENAI_API_KEY"):
+        # If it's a longer message that might be a question
+        # OR if the guided flow didn't find anything new
+        is_question = len(msg.split()) > 2 or "?" in msg
+        found_nothing_new = next_step == step and len(updated_symptoms) == len(collected)
+        
+        if is_question or found_nothing_new:
+            try:
+                llm_reply = await medical_chat([{"role": "user", "content": user_message}])
+                return llm_reply, {"mode": "medical_qa", "step": step, "collected_symptoms": updated_symptoms}
+            except Exception as e:
+                print(f"LLM Chat Error: {e}")
+                # Fallback to guided reply below
 
     return reply, {"mode": "guided", "step": next_step, "collected_symptoms": updated_symptoms}

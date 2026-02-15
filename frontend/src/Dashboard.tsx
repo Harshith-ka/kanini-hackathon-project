@@ -110,78 +110,99 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ background: 'rgba(0,0,0,0.01)' }}>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Patient ID</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Clinical Status</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Risk Indicator</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Symptoms</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assigned Dept</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody style={{ position: 'relative' }}>
-              <AnimatePresence mode="popLayout">
-                {patients.length === 0 ? (
-                  <motion.tr
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    key="empty"
-                  >
-                    <td colSpan={6} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No patients currently in queue</td>
-                  </motion.tr>
-                ) : (
-                  patients.map((p) => (
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
+
+
+              <thead>
+                <tr style={{ background: 'rgba(0,0,0,0.01)' }}>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '130px', whiteSpace: 'nowrap' }}>Patient ID</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '150px', whiteSpace: 'nowrap' }}>Clinical Status</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px', whiteSpace: 'nowrap' }}>Risk Indicator</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '200px', whiteSpace: 'nowrap' }}>Risk Factors</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '240px', whiteSpace: 'nowrap' }}>Symptoms</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px', whiteSpace: 'nowrap' }}>Assigned Dept</th>
+                  <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right', width: '220px', whiteSpace: 'nowrap' }}>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody style={{ position: 'relative' }}>
+                <AnimatePresence mode="popLayout">
+                  {patients.length === 0 ? (
                     <motion.tr
-                      key={p.patient_id}
-                      layout
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                      style={{ borderBottom: '1px solid var(--border-light)', background: '#fff' }}
-                      className="table-row-hover"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      key="empty"
                     >
-                      <td style={{ padding: '20px 24px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{p.patient_id.slice(0, 8)}...</td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.risk_level === 'high' ? 'var(--critical)' : p.risk_level === 'medium' ? 'var(--warning)' : 'var(--success)' }}></div>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>{p.risk_level.toUpperCase()}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{p.confidence_score}%</span>
-                          <div style={{ width: 60, height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${p.confidence_score}%` }}
-                              transition={{ duration: 0.8, ease: "easeOut" }}
-                              style={{ height: '100%', background: 'var(--accent)' }}
-                            ></motion.div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '20px 24px', color: 'var(--text)', fontWeight: 500, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {(p.symptoms || []).map(s => s.replace(/_/g, ' ')).join(', ')}
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{p.recommended_department}</div>
-                      </td>
-                      <td style={{ padding: '20px 24px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                          <button onClick={() => setSelectedPatient(p)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>View</button>
-                          <button onClick={() => handleDischarge(p.patient_id)} style={{ padding: '8px 16px', borderRadius: 10, background: '#fff', border: '1px solid #fee2e2', fontSize: 12, color: 'var(--critical)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>Discharge</button>
-                        </div>
-                      </td>
+                      <td colSpan={7} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No patients currently in queue</td>
+
                     </motion.tr>
-                  ))
-                )}
-              </AnimatePresence>
-            </tbody>
-          </table>
+                  ) : (
+                    patients.map((p) => (
+                      <motion.tr
+                        key={p.patient_id}
+                        layout
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        style={{ borderBottom: '1px solid var(--border-light)', background: '#fff' }}
+                        className="table-row-hover"
+                      >
+                        <td style={{ padding: '20px 24px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{p.patient_id.slice(0, 8)}...</td>
+                        <td style={{ padding: '20px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.risk_level === 'high' ? 'var(--critical)' : p.risk_level === 'medium' ? 'var(--warning)' : 'var(--success)' }}></div>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{p.risk_level.toUpperCase()}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '20px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{p.confidence_score}%</span>
+                            <div style={{ width: 60, height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${p.confidence_score}%` }}
+                                transition={{ duration: 0.8, ease: "easeOut" }}
+                                style={{ height: '100%', background: 'var(--accent)' }}
+                              ></motion.div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '20px 24px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {p.explainability?.top_contributing_features?.slice(0, 2).map((feat, idx) => (
+                              <span key={idx} style={{ fontSize: 10, background: 'rgba(37, 99, 235, 0.05)', color: 'var(--accent)', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                {feat.name}
+                              </span>
+                            )) || <span style={{ color: '#94a3b8', fontSize: 11 }}>N/A</span>}
+                          </div>
+                        </td>
+                        <td style={{ padding: '20px 24px', color: 'var(--text)', fontWeight: 600, fontSize: 13, overflow: 'hidden' }}>
+                          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {(p.symptoms || []).map(s => s.replace(/_/g, ' ')).join(', ')}
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '20px 24px' }}>
+                          <div style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{p.recommended_department}</div>
+                        </td>
+                        <td style={{ padding: '20px 24px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', minWidth: 180 }}>
+                            <button onClick={() => setSelectedPatient(p)} style={{ padding: '8px 14px', borderRadius: 10, background: 'var(--accent)', border: 'none', fontSize: 12, color: '#fff', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 10px var(--accent-glow)' }}>View Analysis</button>
+                            <button onClick={() => handleDischarge(p.patient_id)} style={{ padding: '8px 14px', borderRadius: 10, background: '#fff', border: '1px solid #fee2e2', fontSize: 12, color: 'var(--critical)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>Discharge</button>
+                          </div>
+                        </td>
+
+                      </motion.tr>
+                    ))
+                  )}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+
 
           <div style={{ padding: '1.25rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-muted)', fontSize: 12, background: 'rgba(0,0,0,0.01)' }}>
             <div style={{ fontWeight: 600 }}>Active Census: <strong>{patients.length} patients</strong> currently in triage</div>

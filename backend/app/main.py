@@ -249,14 +249,23 @@ async def add_patient(
 
     
     # Merge AI results into explainability
-    final_explain_dict = expert_system_explain.model_dump()
+    final_explain_dict = expert_system_explain.copy()
     if ai_res:
-        final_explain_dict["department_reasoning"] = ai_res.get("department_reasoning", final_explain_dict["department_reasoning"])
-        final_explain_dict["disease_insights"] = ai_res.get("disease_insights", [])
-        if ai_res.get("top_contributing_features"):
-             final_explain_dict["top_contributing_features"] = ai_res.get("top_contributing_features")
+        if ai_res.get("department_reasoning"):
+            final_explain_dict["department_reasoning"] = ai_res.get("department_reasoning")
+        
+        if ai_res.get("disease_insights"):
+            final_explain_dict["disease_insights"] = ai_res.get("disease_insights")
+            
+        # Only overwrite if it's a non-empty list of dicts
+        ai_features = ai_res.get("top_contributing_features")
+        if isinstance(ai_features, list) and len(ai_features) > 0:
+            if all(isinstance(f, dict) for f in ai_features):
+                final_explain_dict["top_contributing_features"] = ai_features
+        
         if ai_res.get("safety_disclaimer"):
              final_explain_dict["safety_disclaimer"] = ai_res.get("safety_disclaimer")
+
 
     severity_timeline = predict_severity_timeline(
         risk_level=risk_level,
